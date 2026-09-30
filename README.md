@@ -14,6 +14,8 @@ perk, no script needed just to show a prompt.
 [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444).
 No plugin (esp) of its own, so it takes no load order slot.
 
+**Download:** [Nexus Mods](https://www.nexusmods.com/skyrimspecialedition/mods/193566)
+
 ## For mod authors
 
 ### Quick start
