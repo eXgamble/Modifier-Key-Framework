@@ -161,7 +161,6 @@ without `.json`. To reuse an existing file, such as your MCM's, name it at the t
 ```
 
 A key that isn't found is shown as is (`$ANDR_KO_Prompt_GivePotion`), with a warning in the log.
-Keep labels short: see [Known issues](#known-issues).
 
 ### Papyrus API
 
@@ -220,12 +219,6 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 
 `SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
 a gamepad button (default Left Shoulder), and the alternate-action marker (empty = no marker).
-
-## Known issues
-
-- **Better Third Person Selection (BTPS)**: with the keyboard/mouse button icon, long labels overlap
-  the icon. This is BTPS's prompt layout (it happens with any mod's long label, including Dynamic
-  Activation Key and Use Or Take), not this framework; the gamepad icon is unaffected.
 
 ## Building
 
