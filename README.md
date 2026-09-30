@@ -39,7 +39,19 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 | `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
 | `primary` | label shown, and the SKSE mod event sent on activation (the NPC is the event's sender). Without an `event`, only the label changes and activation stays vanilla |
 | `alternate` | optional second action, used while the modifier key is held |
-| `priority` | when several rules match, the highest wins |
+| `priority` | when several rules match, the highest wins (default 0) |
+
+### When rules compete
+
+Only one rule runs per NPC: the matching rule with the highest `priority`. On a tie, the rule from
+the file whose name sorts first wins (alphabetical, ignoring case), then the one listed first in
+that file. The result never depends on install order.
+
+The log (`ModifierKeyFramework.log`) helps sort out overlaps between mods:
+
+- at startup, every priority shared by rules from different files, in winning order;
+- when the player activates an NPC that rules from other files also match, which rule was used and
+  which were ignored (each pair once per session).
 
 ### Conditions
 

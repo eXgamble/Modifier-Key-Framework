@@ -304,12 +304,37 @@ namespace Rules
 			logger::info("No rule folder ({}), nothing to do", RULES_DIR);
 			return;
 		}
+		// Files in name order (case-insensitive), so equal priorities always resolve the same way:
+		// by file name, then by position in the file (the sort below is stable)
+		std::vector<std::filesystem::path> files;
 		for (const auto& entry : std::filesystem::directory_iterator(RULES_DIR, ec)) {
 			if (entry.is_regular_file() && entry.path().extension() == ".json") {
-				LoadFile(entry.path());
+				files.push_back(entry.path());
 			}
 		}
+		const auto lower = [](const std::filesystem::path& a_path) {
+			auto name = a_path.filename().string();
+			std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			return name;
+		};
+		std::ranges::sort(files, {}, lower);
+		for (const auto& file : files) {
+			LoadFile(file);
+		}
 		std::ranges::stable_sort(rules, std::ranges::greater{}, &Rule::priority);
+
+		// Rules from different files sharing a priority: fine, but say who wins a tie
+		for (auto first = rules.begin(); first != rules.end();) {
+			const auto last = std::ranges::find_if(first, rules.end(), [&](const Rule& r) { return r.priority != first->priority; });
+			if (std::ranges::any_of(first, last, [&](const Rule& r) { return r.file != first->file; })) {
+				std::string order;
+				for (auto it = first; it != last; ++it) {
+					order += std::format("{}{} / {}", order.empty() ? "" : ", ", it->file, it->id);
+				}
+				logger::info("Priority {} is shared by several mods; when more than one matches, the first wins: {}", first->priority, order);
+			}
+			first = last;
+		}
 		logger::info("{} rule(s) active", rules.size());
 	}
 
@@ -325,5 +350,28 @@ namespace Rules
 			}
 		}
 		return nullptr;
+	}
+
+	void ReportConflicts(RE::Actor* a_actor, const Rule* a_winner)
+	{
+		static std::set<std::pair<const Rule*, const Rule*>> reported;
+
+		Inventory inventory(a_actor);
+		bool      after = false;
+		for (const auto& rule : rules) {
+			if (&rule == a_winner) {
+				after = true;
+				continue;
+			}
+			if (!after || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
+				continue;
+			}
+			if (Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+				reported.insert({ a_winner, &rule });
+				const char* name = a_actor->GetDisplayFullName();
+				logger::info("Conflict on {} ({:08X}): {} / {} (priority {}) is used; {} / {} (priority {}) also matches and is ignored",
+					name ? name : "?", a_actor->GetFormID(), a_winner->file, a_winner->id, a_winner->priority, rule.file, rule.id, rule.priority);
+			}
+		}
 	}
 }

@@ -66,4 +66,8 @@ namespace Rules
 
 	// The highest-priority rule the actor matches, or nullptr.
 	const Rule* Match(RE::Actor* a_actor);
+
+	// Logs (once per pair) each rule from another file that also matches the actor but lost to
+	// a_winner. Called on activation only, not for every prompt update.
+	void ReportConflicts(RE::Actor* a_actor, const Rule* a_winner);
 }

@@ -62,6 +62,7 @@ namespace
 			if (a_activatorRef && a_activatorRef->IsPlayerRef() && a_targetRef) {
 				auto actor = a_targetRef->As<RE::Actor>();
 				if (const auto rule = Rules::Match(actor)) {
+					Rules::ReportConflicts(actor, rule);
 					if (const auto& action = CurrentAction(*rule); !action.event.empty()) {
 						SendRuleEvent(action.event, a_targetRef);
 						return true;
