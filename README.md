@@ -40,6 +40,7 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 | `primary` | label shown, and the SKSE mod event sent on activation (the NPC is the event's sender). Without an `event`, only the label changes and activation stays vanilla |
 | `alternate` | optional second action, used while the modifier key is held |
 | `priority` | when several rules match, the highest wins (default 0) |
+| `enabled` | optional, default `true`; `false` = off until a script turns it on (see Papyrus API) |
 
 ### Handling the action in Papyrus
 
@@ -131,6 +132,28 @@ to mention optional mods, especially in `not`.
 **Mistakes are logged, not guessed at:** a misspelled condition, a malformed or missing form, or a
 form of the wrong type skips the rule with the reason in `ModifierKeyFramework.log`
 (`Documents/My Games/Skyrim Special Edition/SKSE/`).
+
+## Papyrus API
+
+Script `ModifierKeyFramework` (source in `Scripts/Source/ModifierKeyFramework.psc`):
+
+| Function | Does |
+|---|---|
+| `Int GetVersion()` | the framework's version: major × 10000 + minor × 100 + patch (`10000` = 1.0.0) |
+| `Bool IsModifierHeld()` | whether the modifier key (keyboard or gamepad) is held right now |
+| `Bool SetRuleEnabled(String asFile, String asRuleId, Bool abEnabled)` | switches one of your rules on or off; `false` if there's no such rule |
+| `Bool IsRuleEnabled(String asFile, String asRuleId)` | whether the rule is on |
+
+- `asFile` is the rule file's name with or without `.json`; file and rule id are case-insensitive.
+- A rule starts as its `"enabled"` value in the rule file (default `true`); ship it `false` to turn
+  it on from a script.
+- The switch is **not saved**: set it again on every game load, typically from your MCM setting in
+  `OnPlayerLoadGame`, together with your `RegisterForModEvent` calls. A removed or updated mod
+  never leaves stale state behind.
+- The prompt updates at once when the NPC under the crosshair is affected.
+
+To check that the framework is installed without depending on its script:
+`SKSE.GetPluginVersion("ModifierKeyFramework") > 0`.
 
 ## Settings
 

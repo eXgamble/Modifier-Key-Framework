@@ -86,4 +86,9 @@ namespace Input
 	{
 		return keyboardHeld || gamepadHeld;
 	}
+
+	void QueuePromptRefresh()
+	{
+		SKSE::GetTaskInterface()->AddTask([] { RefreshPrompt(); });
+	}
 }

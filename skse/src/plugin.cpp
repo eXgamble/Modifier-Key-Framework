@@ -1,9 +1,10 @@
 // Modifier Key Framework: SKSE plugin.
-// Mods declare activation rules for NPCs in JSON; the framework shows the prompt (and, in later
-// steps, runs the actions and handles the shared modifier key).
+// Mods declare activation rules for NPCs in JSON; the framework shows the prompt, runs the actions
+// (SKSE mod events), handles the shared modifier key, and offers a small Papyrus API.
 
 #include "Hooks.h"
 #include "Input.h"
+#include "Papyrus.h"
 #include "Rules.h"
 #include "Settings.h"
 
@@ -43,6 +44,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 
 	SKSE::Init(a_skse, false);
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
+	SKSE::GetPapyrusInterface()->Register(Papyrus::Register);
 	Hooks::Install();
 
 	logger::info("ModifierKeyFramework loaded");

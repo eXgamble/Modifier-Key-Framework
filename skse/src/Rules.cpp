@@ -200,6 +200,12 @@ namespace
 			currentRule = std::format("{} / {}", file, rule.id);
 			try {
 				rule.priority = entry.value("priority", 0);
+				if (entry.contains("enabled")) {
+					if (!entry["enabled"].is_boolean()) {
+						throw RuleError{ "\"enabled\" must be true or false" };
+					}
+					rule.enabled.value = entry["enabled"].get<bool>();
+				}
 				if (entry.value("target", "npc") != "npc") {
 					throw RuleError{ "only \"target\": \"npc\" is supported" };
 				}
@@ -376,7 +382,22 @@ namespace Rules
 		}
 		Inventory inventory(a_actor);
 		for (const auto& rule : rules) {
-			if (Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+			if (rule.enabled.value && Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+				return &rule;
+			}
+		}
+		return nullptr;
+	}
+
+	Rule* Find(std::string_view a_file, std::string_view a_id)
+	{
+		const auto equalNoCase = [](std::string_view a_left, std::string_view a_right) {
+			return std::ranges::equal(a_left, a_right, [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+		};
+		for (auto& rule : rules) {
+			const std::string_view file = rule.file;
+			const auto             stem = file.substr(0, file.size() - 5);  // without ".json"
+			if ((equalNoCase(file, a_file) || equalNoCase(stem, a_file)) && equalNoCase(rule.id, a_id)) {
 				return &rule;
 			}
 		}
@@ -394,7 +415,7 @@ namespace Rules
 				after = true;
 				continue;
 			}
-			if (!after || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
+			if (!after || !rule.enabled.value || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
 				continue;
 			}
 			if (Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {

@@ -7,4 +7,7 @@ namespace Input
 	void Register();
 
 	bool IsModifierHeld();
+
+	// Rebuild the prompt of the NPC under the crosshair, on the game thread (safe from any thread)
+	void QueuePromptRefresh();
 }

@@ -59,6 +59,21 @@ namespace Rules
 		std::optional<bool>              inCombat;
 	};
 
+	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)
+	struct EnabledFlag
+	{
+		std::atomic<bool> value{ true };
+
+		EnabledFlag() = default;
+		EnabledFlag(const EnabledFlag& a_other) :
+			value(a_other.value.load()) {}
+		EnabledFlag& operator=(const EnabledFlag& a_other)
+		{
+			value = a_other.value.load();
+			return *this;
+		}
+	};
+
 	struct Rule
 	{
 		std::string           file;  // for log messages
@@ -68,10 +83,15 @@ namespace Rules
 		std::int32_t          priority = 0;
 		Action                primary;
 		std::optional<Action> alternate;
+		EnabledFlag           enabled;  // "enabled" in JSON (default true), then Papyrus
 	};
 
 	// Reads every rule file. Needs kDataLoaded (form look-ups).
 	void Load();
+
+	// A rule by its file ("DeathTimer" or "DeathTimer.json") and id, both in any case (Papyrus strings
+	// are case-insensitive: the game may hand over a differently cased copy), or nullptr
+	Rule* Find(std::string_view a_file, std::string_view a_id);
 
 	// The highest-priority rule the actor matches, or nullptr.
 	const Rule* Match(RE::Actor* a_actor);
