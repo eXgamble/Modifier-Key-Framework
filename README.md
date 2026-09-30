@@ -210,6 +210,7 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 |---|---|---|
 | Setup | perk + entry points + conditions in the Creation Kit, perk distribution | a JSON file |
 | Plugin | your mod's plugin must master DAK | none; no load order slot |
+| Prompt shows the NPC's name | no: the action label replaces the whole prompt (`Search`) | yes: vanilla two lines (`Search` / `Lydia`) |
 | Player sees a second action | no | yes: the `+` marker on the prompt |
 | Two mods on the same NPC | perk entry priority, silent | priority, deterministic, logged |
 | Conditions | the Creation Kit's full condition set | the list above; anything else through a keyword, faction or item |
