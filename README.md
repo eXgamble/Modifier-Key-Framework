@@ -41,6 +41,34 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 | `alternate` | optional second action, used while the modifier key is held |
 | `priority` | when several rules match, the highest wins (default 0) |
 
+### Handling the action in Papyrus
+
+Activating sends the action's `event` as an SKSE mod event. Register for it (mod event
+registrations don't survive a save load, so register again on every load, e.g. from a player
+alias's `OnPlayerLoadGame`):
+
+```papyrus
+RegisterForModEvent("MyMod_Action", "OnMyModAction")
+
+Event OnMyModAction(String asEventName, String asRuleId, Float afIsAlternate, Form akTarget)
+	Actor target = akTarget As Actor
+	If afIsAlternate
+		; the alternate action (modifier key held)
+	Else
+		; the primary action
+	EndIf
+EndEvent
+```
+
+| Parameter | Value |
+|---|---|
+| `asEventName` | the action's `event` |
+| `asRuleId` | the rule's `id`, so one handler can serve several rules |
+| `afIsAlternate` | `1.0` for the alternate action, `0.0` for the primary |
+| `akTarget` | the NPC |
+
+`primary` and `alternate` may use the same `event`, or different ones.
+
 ### Translated labels
 
 A label can be a `$Key` instead of plain text. Keys are looked up in

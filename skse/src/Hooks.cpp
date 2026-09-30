@@ -39,16 +39,21 @@ namespace
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-	// Send a rule's SKSE mod event, with the target as sender: the mod that owns the rule reacts in
-	// Papyrus (RegisterForModEvent). Queued as a task, by handle, so it runs on the game thread.
-	void SendRuleEvent(const std::string& a_event, RE::TESObjectREFR* a_target)
+	// Send a rule's SKSE mod event: the mod that owns the rule reacts in Papyrus
+	// (RegisterForModEvent). Event(String eventName, String ruleId, Float isAlternate, Form target):
+	// the rule's id, 1.0 for the alternate action (0.0 primary), and the NPC as sender.
+	// Queued as a task, by handle, so it runs on the game thread.
+	void SendRuleEvent(const Rules::Rule& a_rule, const Rules::Action& a_action, RE::TESObjectREFR* a_target)
 	{
-		SKSE::GetTaskInterface()->AddTask([event = a_event, handle = a_target->GetHandle()]() {
+		const float isAlternate = &a_action == &a_rule.primary ? 0.0f : 1.0f;
+		const char* name = a_target->GetDisplayFullName();
+		logger::info("{} ({:08X}): {} / {} sends \"{}\" ({})", name ? name : "?", a_target->GetFormID(), a_rule.file, a_rule.id, a_action.event, isAlternate != 0.0f ? "alternate" : "primary");
+		SKSE::GetTaskInterface()->AddTask([event = a_action.event, id = a_rule.id, isAlternate, handle = a_target->GetHandle()]() {
 			auto ref = handle.get();
 			if (!ref) {
 				return;
 			}
-			SKSE::ModCallbackEvent modEvent{ event, ""sv, 0.0f, ref.get() };
+			SKSE::ModCallbackEvent modEvent{ event, id, isAlternate, ref.get() };
 			SKSE::GetModCallbackEventSource()->SendEvent(&modEvent);
 		});
 	}
@@ -64,7 +69,7 @@ namespace
 				if (const auto rule = Rules::Match(actor)) {
 					Rules::ReportConflicts(actor, rule);
 					if (const auto& action = CurrentAction(*rule); !action.event.empty()) {
-						SendRuleEvent(action.event, a_targetRef);
+						SendRuleEvent(*rule, action, a_targetRef);
 						return true;
 					}
 				}
