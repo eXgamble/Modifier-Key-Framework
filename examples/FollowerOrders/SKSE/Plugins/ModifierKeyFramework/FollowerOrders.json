@@ -1,0 +1,23 @@
+{
+  // Example rule file for the Modifier Key Framework (not part of the release).
+  // Followers keep their normal "Talk"; holding the modifier key switches the prompt to "Wait Here".
+  "$schema": "../../../../../schema/rules.schema.json",  // editor autocomplete / checks; not needed in game
+  "version": 1,
+  "rules": [
+    {
+      "id": "orders",
+      "target": "npc",
+      "requires": { "teammate": true, "alive": true },
+      "not": { "inCombat": true },
+
+      // no "event": activating without the key stays vanilla (dialogue); the label is shown as "Talk +"
+      "primary": { "label": "Talk" },
+
+      // with the key held: "Wait Here", sending FollowerOrders_Order to the script
+      "alternate": { "label": "Wait Here", "event": "FollowerOrders_Order" },
+
+      "priority": 10,
+      "enabled": false  // the script turns it on (e.g. from an MCM toggle) on every load
+    }
+  ]
+}

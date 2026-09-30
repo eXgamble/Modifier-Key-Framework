@@ -8,6 +8,10 @@ namespace
 
 	constexpr auto RULES_DIR = "Data/SKSE/Plugins/ModifierKeyFramework";
 
+	// Rule files may say which format they're written for ("version"); newer ones are refused
+	// instead of half-understood. Files without it are version 1.
+	constexpr std::int32_t RULE_FORMAT_VERSION = 1;
+
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
 	std::string currentRule;  // "file / id" of the rule being read, for log messages
@@ -157,13 +161,30 @@ namespace
 		return conditions;
 	}
 
-	std::optional<Rules::Action> ReadAction(const json& a_json)
+	// Every key of an object must be one of a_known (typos would otherwise be silently ignored)
+	void CheckKeys(const json& a_object, std::initializer_list<std::string_view> a_known, std::string_view a_where)
 	{
-		if (!a_json.is_object() || !a_json.contains("label")) {
-			return std::nullopt;
+		for (const auto& [key, value] : a_object.items()) {
+			if (std::ranges::find(a_known, key) == a_known.end()) {
+				throw RuleError{ std::format("unknown key \"{}\" in {}", key, a_where) };
+			}
+		}
+	}
+
+	// "primary" / "alternate": { "label": "...", "event": "..." } (event optional)
+	Rules::Action ReadAction(const json& a_json, std::string_view a_name)
+	{
+		if (a_json.is_object()) {
+			CheckKeys(a_json, { "label", "event" }, std::format("\"{}\"", a_name));
+		}
+		if (!a_json.is_object() || !a_json.contains("label") || !a_json["label"].is_string()) {
+			throw RuleError{ std::format("\"{}\" needs a \"label\" (text)", a_name) };
+		}
+		if (a_json.contains("event") && !a_json["event"].is_string()) {
+			throw RuleError{ std::format("\"{}\": \"event\" must be text", a_name) };
 		}
 		Rules::Action action;
-		action.label = a_json.value("label", "");
+		action.label = a_json["label"].get<std::string>();
 		action.event = a_json.value("event", "");
 		return action;
 	}
@@ -190,15 +211,41 @@ namespace
 			return;
 		}
 
+		// the file as a whole: format version, known keys, a rule list
+		try {
+			if (!root.is_object()) {
+				throw RuleError{ "expected an object with \"rules\"" };
+			}
+			CheckKeys(root, { "$schema", "version", "translations", "rules" }, "the file");
+			if (root.contains("version")) {
+				if (!root["version"].is_number_integer()) {
+					throw RuleError{ "\"version\" must be a whole number" };
+				}
+				if (const auto version = root["version"].get<std::int32_t>(); version > RULE_FORMAT_VERSION) {
+					throw RuleError{ std::format("written for rule format version {}, this Modifier Key Framework reads up to {}; update the framework", version, RULE_FORMAT_VERSION) };
+				}
+			}
+			if (!root.contains("rules") || !root["rules"].is_array()) {
+				throw RuleError{ "\"rules\" must be a list" };
+			}
+		} catch (const RuleError& e) {
+			logger::error("{}: {}, file skipped", file, e.what);
+			return;
+		}
+
 		LoadTranslations(root.value("translations", a_path.stem().string()));
 
 		std::size_t loaded = 0;
-		for (const auto& entry : root.value("rules", json::array())) {
+		for (const auto& entry : root["rules"]) {
 			Rules::Rule rule;
 			rule.file = file;
-			rule.id = entry.value("id", "?");
+			rule.id = entry.is_object() ? entry.value("id", "?") : "?";
 			currentRule = std::format("{} / {}", file, rule.id);
 			try {
+				if (!entry.is_object()) {
+					throw RuleError{ "a rule must be an object" };
+				}
+				CheckKeys(entry, { "id", "target", "requires", "not", "primary", "alternate", "priority", "enabled" }, "the rule");
 				rule.priority = entry.value("priority", 0);
 				if (entry.contains("enabled")) {
 					if (!entry["enabled"].is_boolean()) {
@@ -209,12 +256,10 @@ namespace
 				if (entry.value("target", "npc") != "npc") {
 					throw RuleError{ "only \"target\": \"npc\" is supported" };
 				}
-				auto primary = ReadAction(entry.value("primary", json{}));
-				if (!primary) {
-					throw RuleError{ "missing \"primary\" with a \"label\"" };
+				rule.primary = ReadAction(entry.value("primary", json{}), "primary");
+				if (entry.contains("alternate")) {
+					rule.alternate = ReadAction(entry["alternate"], "alternate");
 				}
-				rule.primary = std::move(*primary);
-				rule.alternate = ReadAction(entry.value("alternate", json{}));
 				if (entry.contains("requires")) {
 					rule.requirements = ReadConditions(entry["requires"], "requires", true);
 				}

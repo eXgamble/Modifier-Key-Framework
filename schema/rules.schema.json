@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ModifierKeyFramework/rules.schema.json",
+  "title": "Modifier Key Framework rule file",
+  "description": "One file per mod in Data/SKSE/Plugins/ModifierKeyFramework/*.json. Comments (// and /* */) are allowed.",
+  "type": "object",
+  "required": ["rules"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "description": "Rule format version this file is written for. Files without it are version 1.",
+      "type": "integer",
+      "enum": [1]
+    },
+    "translations": {
+      "description": "Name of the translation file for $Key labels: Interface/Translations/<name>_<LANGUAGE>.txt. Default: this file's name without .json.",
+      "type": "string",
+      "minLength": 1
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/rule" }
+    }
+  },
+  "definitions": {
+    "rule": {
+      "type": "object",
+      "required": ["id", "primary"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Name of the rule: shown in the log, sent with the event, used by SetRuleEnabled.",
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "description": "What the rule applies to. Only NPCs for now.",
+          "type": "string",
+          "enum": ["npc"],
+          "default": "npc"
+        },
+        "requires": {
+          "description": "Conditions that must all hold.",
+          "$ref": "#/definitions/conditions"
+        },
+        "not": {
+          "description": "Conditions of which none may hold.",
+          "$ref": "#/definitions/conditions"
+        },
+        "primary": {
+          "description": "The action when activating normally.",
+          "$ref": "#/definitions/action"
+        },
+        "alternate": {
+          "description": "The action while the modifier key is held. Adds the marker (default '+') to the primary label.",
+          "$ref": "#/definitions/action"
+        },
+        "priority": {
+          "description": "When several rules match, the highest wins; ties go to the file name that sorts first.",
+          "type": "integer",
+          "default": 0
+        },
+        "enabled": {
+          "description": "false: off until a script calls ModifierKeyFramework.SetRuleEnabled(file, id, true).",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["label"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Text on the first prompt line, or a $Key from the translation file.",
+          "type": "string",
+          "minLength": 1
+        },
+        "event": {
+          "description": "SKSE mod event sent on activation: Event(String eventName, String ruleId, Float isAlternate, Form target). Without it, only the label changes and activation stays vanilla.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "formRef": {
+      "description": "\"Plugin.esp|0xLocalID\" (light plugins too).",
+      "type": "string",
+      "pattern": "^[^|]+\\.(esp|esm|esl)\\|(0[xX])?[0-9A-Fa-f]{1,8}$"
+    },
+    "forms": {
+      "description": "One form, or a list: any one of them counts.",
+      "oneOf": [
+        { "$ref": "#/definitions/formRef" },
+        { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/formRef" } }
+      ]
+    },
+    "faction": {
+      "oneOf": [
+        { "$ref": "#/definitions/formRef" },
+        {
+          "type": "object",
+          "required": ["form"],
+          "additionalProperties": false,
+          "properties": {
+            "form": { "$ref": "#/definitions/formRef" },
+            "minRank": { "type": "integer" }
+          }
+        }
+      ]
+    },
+    "conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "item": { "description": "Carries the item.", "$ref": "#/definitions/forms" },
+        "keyword": { "description": "Has the keyword (on the NPC or its race).", "$ref": "#/definitions/forms" },
+        "faction": {
+          "description": "Is in the faction (optionally with a minimum rank). A list: any one of them.",
+          "oneOf": [
+            { "$ref": "#/definitions/faction" },
+            { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/faction" } }
+          ]
+        },
+        "race": { "description": "Is of the race.", "$ref": "#/definitions/forms" },
+        "npc": { "description": "Is this NPC (base NPC record, not a placed reference).", "$ref": "#/definitions/forms" },
+        "alive": { "description": "true: alive, false: dead.", "type": "boolean" },
+        "teammate": { "description": "Is the player's teammate (a follower).", "type": "boolean" },
+        "essential": { "description": "Is essential.", "type": "boolean" },
+        "protected": { "description": "Is protected.", "type": "boolean" },
+        "bleedingOut": { "description": "Is in bleedout.", "type": "boolean" },
+        "unconscious": { "description": "Is unconscious.", "type": "boolean" },
+        "sitting": { "description": "Is sitting (furniture, or riding).", "type": "boolean" },
+        "sleeping": { "description": "Is asleep in a bed.", "type": "boolean" },
+        "inCombat": { "description": "Is in combat.", "type": "boolean" }
+      }
+    }
+  }
+}
