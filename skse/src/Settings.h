@@ -5,7 +5,8 @@ namespace Settings
 {
 	void Load();
 
-	// DirectX scan code of the modifier key (default Left Shift), and the gamepad button (-1 = none)
+	// DirectX scan code of the modifier key (default Left Shift), and the gamepad button in SKSE key
+	// numbering (default 274 = Left Shoulder, -1 = none)
 	std::uint32_t ModifierKey();
 	std::int32_t  ModifierKeyGamepad();
 
