@@ -28,6 +28,38 @@ namespace
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	// Send a rule's SKSE mod event, with the target as sender: the mod that owns the rule reacts in
+	// Papyrus (RegisterForModEvent). Queued as a task, by handle, so it runs on the game thread.
+	void SendRuleEvent(const std::string& a_event, RE::TESObjectREFR* a_target)
+	{
+		SKSE::GetTaskInterface()->AddTask([event = a_event, handle = a_target->GetHandle()]() {
+			auto ref = handle.get();
+			if (!ref) {
+				return;
+			}
+			SKSE::ModCallbackEvent modEvent{ event, ""sv, 0.0f, ref.get() };
+			SKSE::GetModCallbackEventSource()->SendEvent(&modEvent);
+		});
+	}
+
+	// The player activating an NPC a rule matches: run the rule's action (its mod event) instead of
+	// the vanilla one (dialogue). Anyone else activating, or no matching rule: vanilla.
+	struct Activate
+	{
+		static bool thunk(RE::TESNPC* a_this, RE::TESObjectREFR* a_targetRef, RE::TESObjectREFR* a_activatorRef, std::uint8_t a_arg3, RE::TESBoundObject* a_object, std::int32_t a_targetCount)
+		{
+			if (a_activatorRef && a_activatorRef->IsPlayerRef() && a_targetRef) {
+				auto actor = a_targetRef->As<RE::Actor>();
+				if (const auto rule = Rules::Match(actor); rule && !rule->primary.event.empty()) {
+					SendRuleEvent(rule->primary.event, a_targetRef);
+					return true;
+				}
+			}
+			return func(a_this, a_targetRef, a_activatorRef, a_arg3, a_object, a_targetCount);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
 }
 
 namespace Hooks
@@ -39,6 +71,8 @@ namespace Hooks
 			REL::Relocation<std::uintptr_t> npcVtbl{ RE::VTABLE_TESNPC[0] };
 			GetActivateText::func = REL::Relocation<decltype(GetActivateText::thunk)>{ npcVtbl.write_vfunc(0x4C, GetActivateText::thunk) };
 			logger::info("Hook installed: TESNPC::GetActivateText (0x4C)");
+			Activate::func = REL::Relocation<decltype(Activate::thunk)>{ npcVtbl.write_vfunc(0x37, Activate::thunk) };
+			logger::info("Hook installed: TESNPC::Activate (0x37)");
 		});
 	}
 }
