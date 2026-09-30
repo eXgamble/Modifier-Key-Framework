@@ -3,6 +3,7 @@
 // steps, runs the actions and handles the shared modifier key).
 
 #include "Hooks.h"
+#include "Input.h"
 #include "Rules.h"
 #include "Settings.h"
 
@@ -30,6 +31,7 @@ namespace
 		if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
 			Settings::Load();
 			Rules::Load();
+			Input::Register();
 		}
 	}
 }

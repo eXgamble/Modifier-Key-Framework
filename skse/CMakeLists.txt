@@ -19,7 +19,7 @@ endif()
 add_commonlibsse_plugin(${PROJECT_NAME}
 	NAME "eXModifierFramework"
 	AUTHOR "eXgamble"
-	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp)
+	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_path(SIMPLEINI_INCLUDE_DIRS "SimpleIni.h")

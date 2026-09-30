@@ -1,13 +1,22 @@
 #include "Hooks.h"
 
+#include "Input.h"
 #include "Rules.h"
 #include "Settings.h"
 
 namespace
 {
+	// The action a rule runs right now: its alternate while the modifier key is held (if it has one),
+	// otherwise its primary.
+	const Rules::Action& CurrentAction(const Rules::Rule& a_rule)
+	{
+		return (a_rule.alternate && Input::IsModifierHeld()) ? *a_rule.alternate : a_rule.primary;
+	}
+
 	// The activation prompt: "<label>\n<name>", the same two lines as vanilla's "Talk\nLydia".
 	// When the matched rule also has an alternate action, the primary label gets the marker from
-	// the ini ("Give Potion +"), so players can tell a second action exists.
+	// the ini ("Give Potion +"), so players can tell a second action exists; while the modifier
+	// key is held the prompt shows the alternate label instead, without the marker.
 	struct GetActivateText
 	{
 		static bool thunk(RE::TESNPC* a_this, RE::TESObjectREFR* a_activator, RE::BSString& a_dst)
@@ -16,8 +25,9 @@ namespace
 
 			auto actor = a_activator ? a_activator->As<RE::Actor>() : nullptr;
 			if (const auto rule = Rules::Match(actor)) {
-				std::string label = rule->primary.label;
-				if (rule->alternate) {
+				const auto& action = CurrentAction(*rule);
+				std::string label = action.label;
+				if (rule->alternate && &action == &rule->primary) {
 					label += " " + Settings::AlternateMarker();
 				}
 				const char* name = actor->GetDisplayFullName();
@@ -51,9 +61,11 @@ namespace
 		{
 			if (a_activatorRef && a_activatorRef->IsPlayerRef() && a_targetRef) {
 				auto actor = a_targetRef->As<RE::Actor>();
-				if (const auto rule = Rules::Match(actor); rule && !rule->primary.event.empty()) {
-					SendRuleEvent(rule->primary.event, a_targetRef);
-					return true;
+				if (const auto rule = Rules::Match(actor)) {
+					if (const auto& action = CurrentAction(*rule); !action.event.empty()) {
+						SendRuleEvent(action.event, a_targetRef);
+						return true;
+					}
 				}
 			}
 			return func(a_this, a_targetRef, a_activatorRef, a_arg3, a_object, a_targetCount);
