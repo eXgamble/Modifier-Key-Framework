@@ -1,0 +1,85 @@
+[center][size=6][b]Modifier Key Framework[/b][/size]
+[size=3]Custom activation actions for NPCs, with one shared modifier key for a second action.
+No plugin. No perks. Just a JSON file.[/size][/center]
+
+[size=5][b]What is this?[/b][/size]
+A small SKSE framework that lets mods add their own actions when you activate an NPC: [i]Give Potion[/i], [i]Search[/i], [i]Wait Here[/i], anything a mod needs. A mod can give each NPC two actions: one when you activate normally, and a second one while you hold the [b]modifier key[/b].
+
+[b]For players:[/b] install it if a mod you use requires it. That's all; there is nothing to configure unless you want another key.
+
+[b]For mod authors:[/b] a lightweight alternative to perk-based activation and Dynamic Activation Key. Declare a rule in JSON, handle an event in Papyrus, done.
+
+[size=5][b]What you see in game[/b][/size]
+The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
+[list]
+[*][b]Give Potion +[/b] / Lydia: the [b]+[/b] tells you a second action is available.
+[*]Hold the modifier key and the prompt switches to the second action: [b]Search[/b] / Lydia.
+[/list]
+One key for every mod that uses the framework: [b]Left Shift[/b] on keyboard, [b]Left Shoulder[/b] on gamepad. Both, and the [b]+[/b] marker, can be changed in [i]SKSE/Plugins/ModifierKeyFramework.ini[/i].
+
+[size=5][b]Requirements[/b][/size]
+[list]
+[*][url=https://skse.silverlock.org/]SKSE64[/url]
+[*][url=https://www.nexusmods.com/skyrimspecialedition/mods/32444]Address Library for SKSE Plugins[/url]
+[/list]
+Skyrim [b]Anniversary Edition[/b] (1.6.x, 1.7.x). Not for SE 1.5.97 or VR.
+There is no .esp, so it takes no load order slot and can be added or removed at any time.
+
+[size=5][b]For mod authors[/b][/size]
+One JSON file per mod in [i]SKSE/Plugins/ModifierKeyFramework/[/i]:
+[code]{
+  "version": 1,
+  "rules": [
+    {
+      "id": "downed",
+      "requires": { "item": "MyMod.esp|0x807", "alive": true },
+      "not": { "faction": "Skyrim.esm|0x2BE3B" },
+      "primary":   { "label": "Give Potion", "event": "MyMod_GivePotion" },
+      "alternate": { "label": "Search",      "event": "MyMod_Search" },
+      "priority": 50
+    }
+  ]
+}[/code]
+Activating sends an SKSE mod event to your script, with the NPC, the rule's id, and whether the primary or alternate action was used:
+[code]Event OnMyAction(String asEventName, String asRuleId, Float afIsAlternate, Form akTarget)[/code]
+[list]
+[*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat. Lists mean "any of these", and a [b]not[/b] block excludes.
+[*][b]Optional mods welcome:[/b] a form from a plugin that isn't installed is simply ignored.
+[*][b]Priorities with a conflict log:[/b] when two mods want the same NPC, the higher priority wins, ties are always resolved the same way (never by install order), and the log says who won and who lost.
+[*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
+[*][b]Papyrus API:[/b] version, is the key held, and switch your rules on or off at runtime (e.g. from your MCM).
+[*][b]Label only:[/b] leave out the event and only the label changes; activation stays vanilla.
+[*][b]Clear errors:[/b] typos, wrong form types and bad IDs are reported in [i]ModifierKeyFramework.log[/i] instead of silently doing nothing.
+[*][b]Editor support:[/b] a JSON schema for autocomplete and checks in VS Code and other editors.
+[/list]
+Full documentation, a complete example mod and a [b]Coming from Dynamic Activation Key[/b] guide are on [url=https://github.com/eXgamble/Modifier-Key-Framework]GitHub[/url].
+
+[size=5][b]Compared with Dynamic Activation Key[/b][/size]
+[list]
+[*][b]No plugin, no perk:[/b] a rule file instead of perk entry points, conditions and perk distribution; your plugin doesn't have to master anything.
+[*][b]Players can see the second action[/b] (the [b]+[/b] marker).
+[*][b]Two mods on one NPC[/b] are resolved by priority, deterministically, and logged.
+[*]DAK still has the Creation Kit's full condition set and works on more than NPCs. For conditions this framework doesn't have, give the NPC a keyword, faction or token item (SPID, KID, script) and require that.
+[/list]
+
+[size=5][b]Compatibility[/b][/size]
+[list]
+[*][b]Dynamic Activation Key:[/b] can be installed alongside. Consider giving it a different key.
+[*][b]Read Or Take / Use Or Take:[/b] no overlap (they handle items and books, this handles NPCs), and the same key works for all.
+[*][b]Better Third Person Selection:[/b] with the keyboard button icon, long labels overlap the icon. That is BTPS's prompt layout and happens with any mod's long label; the gamepad icon is fine.
+[*]Mods that replace NPC activation through perks may take priority on the NPCs they affect.
+[/list]
+
+[size=5][b]Mods using this framework[/b][/size]
+[list]
+[*][url=DEATH_TIMER_URL]Death Timer - Immersive Bleedout[/url]: Give Potion / Search on dying followers and NPCs.
+[/list]
+
+[size=5][b]Permissions and source[/b][/size]
+The plugin is GPL-3.0-or-later (it statically links CommonLibSSE-NG); source on [url=https://github.com/eXgamble/Modifier-Key-Framework]GitHub[/url]. Mods that only use it through rule files and Papyrus are not affected by the license and don't need permission.
+
+[size=5][b]Credits[/b][/size]
+[list]
+[*][b]powerofthree[/b]: Read Or Take SKSE, whose prompt and modifier-key approach inspired this framework.
+[*]The CommonLibSSE-NG maintainers and contributors.
+[/list]
