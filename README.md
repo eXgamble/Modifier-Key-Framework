@@ -8,8 +8,8 @@ second action. Replaces per-mod perk activation tricks and Dynamic Activation Ke
 - When a second action is available, the first label gets a marker (default `+`):
   `Give Potion +` / `Lydia`. Holding the modifier key switches it to the second action: `Search` / `Lydia`.
 
-> **Status: in development.** Step 1 (rules + prompt text) is in; running the actions and the
-> modifier key are next.
+> **Status: in development (v0.1).** Rules, prompt text, actions (SKSE mod events) and the
+> modifier key work; used by Death Timer - Immersive Bleedout.
 
 ## For mod authors: rule files
 
@@ -35,14 +35,20 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 | `target` | `"npc"` (only NPCs for now) |
 | `requires.item` | the NPC must carry this item: `"Plugin.esp\|0xLocalID"` |
 | `requires.alive` | `true` / `false` |
-| `primary` | label shown, and the SKSE mod event sent on activation (step 2) |
+| `primary` | label shown, and the SKSE mod event sent on activation (the NPC is the event's sender) |
 | `alternate` | optional second action, used while the modifier key is held |
 | `priority` | when several rules match, the highest wins |
 
 ## Settings
 
 `SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
-a gamepad button, and the alternate-action marker.
+a gamepad button, and the alternate-action marker (empty = no marker).
+
+## Known issues
+
+- **Better Third Person Selection (BTPS)**: with the keyboard/mouse button icon, long labels overlap
+  the icon. This is BTPS's prompt layout (it happens with any mod's long label, including Dynamic
+  Activation Key and Use Or Take), not this framework; the gamepad icon is unaffected.
 
 ## Building
 

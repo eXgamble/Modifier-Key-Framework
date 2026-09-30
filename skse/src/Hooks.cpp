@@ -27,7 +27,7 @@ namespace
 			if (const auto rule = Rules::Match(actor)) {
 				const auto& action = CurrentAction(*rule);
 				std::string label = action.label;
-				if (rule->alternate && &action == &rule->primary) {
+				if (rule->alternate && &action == &rule->primary && !Settings::AlternateMarker().empty()) {
 					label += " " + Settings::AlternateMarker();
 				}
 				const char* name = actor->GetDisplayFullName();
