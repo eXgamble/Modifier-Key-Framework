@@ -22,6 +22,7 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
       "id": "downed",
       "target": "npc",
       "requires": { "item": "Death Timer - Immersive Bleedout.esp|0x807", "alive": true },
+      "not":      { "faction": "Skyrim.esm|0x2BE3B" },  // e.g. never for guards (not in Death Timer's real file)
       "primary":   { "label": "Give Potion", "event": "DeathTimer_GivePotion" },
       "alternate": { "label": "Search",      "event": "DeathTimer_Search" },
       "priority": 50
@@ -32,12 +33,46 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 
 | Field | Meaning |
 |---|---|
+| `id` | a name for the rule, used in log messages |
 | `target` | `"npc"` (only NPCs for now) |
-| `requires.item` | the NPC must carry this item: `"Plugin.esp\|0xLocalID"` |
-| `requires.alive` | `true` / `false` |
-| `primary` | label shown, and the SKSE mod event sent on activation (the NPC is the event's sender) |
+| `requires` | optional: conditions that must **all** hold (see below) |
+| `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
+| `primary` | label shown, and the SKSE mod event sent on activation (the NPC is the event's sender). Without an `event`, only the label changes and activation stays vanilla |
 | `alternate` | optional second action, used while the modifier key is held |
 | `priority` | when several rules match, the highest wins |
+
+### Conditions
+
+Forms are written `"Plugin.esp|0xLocalID"` (light plugins too). A form condition also takes a list,
+which means *any one of them*.
+
+| Condition | Holds when the NPC… |
+|---|---|
+| `item` | carries the item |
+| `keyword` | has the keyword (on the NPC or its race) |
+| `faction` | is in the faction. With a minimum rank: `{ "form": "Plugin.esp\|0xID", "minRank": 1 }` |
+| `race` | is of the race |
+| `npc` | is this NPC (the base NPC record, not a placed reference) |
+| `alive` | `true`: is alive / `false`: is dead |
+| `teammate` | is the player's teammate (a follower) |
+| `essential` | is essential |
+| `protected` | is protected |
+| `bleedingOut` | is in bleedout |
+| `unconscious` | is unconscious |
+| `sitting` | is sitting (furniture, or riding) |
+| `sleeping` | is asleep in a bed |
+| `inCombat` | is in combat |
+
+The `true`/`false` conditions compare with the value given: `"teammate": false` in `requires`
+means *not* a teammate.
+
+**Optional mods:** if a listed form's plugin isn't installed, that entry is ignored (logged). A
+`requires` condition left with no forms can never hold, so the rule is skipped. That makes it safe
+to mention optional mods, especially in `not`.
+
+**Mistakes are logged, not guessed at:** a misspelled condition, a malformed or missing form, or a
+form of the wrong type skips the rule with the reason in `ModifierKeyFramework.log`
+(`Documents/My Games/Skyrim Special Edition/SKSE/`).
 
 ## Settings
 

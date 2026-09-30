@@ -4,45 +4,160 @@
 
 namespace
 {
+	using json = nlohmann::json;
+
 	constexpr auto RULES_DIR = "Data/SKSE/Plugins/ModifierKeyFramework";
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
+	std::string currentRule;  // "file / id" of the rule being read, for log messages
+
+	// Why a rule can't be used: logged once, the rule is skipped
+	struct RuleError
+	{
+		std::string what;
+	};
+
 	// "Plugin.esp|0x807" -> the form (local ID in that plugin, light plugins included).
-	// On failure, a_why says which part didn't resolve.
-	RE::TESBoundObject* ResolveForm(const std::string& a_ref, std::string& a_why)
+	// A plugin that isn't loaded gives nullptr (the entry is dropped: soft dependencies work);
+	// anything else that doesn't resolve is the rule author's mistake and throws.
+	RE::TESForm* ResolveForm(const std::string& a_ref)
 	{
 		const auto bar = a_ref.find('|');
 		if (bar == std::string::npos) {
-			a_why = "expected \"Plugin.esp|0xID\"";
-			return nullptr;
+			throw RuleError{ std::format("\"{}\": expected \"Plugin.esp|0xID\"", a_ref) };
 		}
 		const auto plugin = a_ref.substr(0, bar);
 		RE::FormID localID = 0;
 		try {
 			localID = static_cast<RE::FormID>(std::stoul(a_ref.substr(bar + 1), nullptr, 16));
 		} catch (...) {
-			a_why = std::format("\"{}\" is not a hex form ID", a_ref.substr(bar + 1));
-			return nullptr;
+			throw RuleError{ std::format("\"{}\": \"{}\" is not a hex form ID", a_ref, a_ref.substr(bar + 1)) };
 		}
 		const auto dataHandler = RE::TESDataHandler::GetSingleton();
 		if (!dataHandler->LookupModByName(plugin)) {
-			a_why = std::format("plugin \"{}\" is not loaded", plugin);
 			return nullptr;
 		}
 		const auto form = dataHandler->LookupForm(localID, plugin);
 		if (!form) {
-			a_why = std::format("plugin \"{}\" has no form {:06X}", plugin, localID);
-			return nullptr;
+			throw RuleError{ std::format("\"{}\": plugin \"{}\" has no form {:06X}", a_ref, plugin, localID) };
 		}
-		const auto object = form->As<RE::TESBoundObject>();
-		if (!object) {
-			a_why = std::format("form {:08X} in \"{}\" is not an item (form type {})", form->GetFormID(), plugin, static_cast<int>(form->GetFormType()));
-		}
-		return object;
+		return form;
 	}
 
-	std::optional<Rules::Action> ReadAction(const nlohmann::json& a_json)
+	template <class T>
+	T* ResolveAs(const std::string& a_ref, std::string_view a_kind)
+	{
+		const auto form = ResolveForm(a_ref);
+		if (!form) {
+			logger::info("{}: \"{}\": plugin not loaded, entry ignored", currentRule, a_ref);
+			return nullptr;
+		}
+		const auto typed = form->As<T>();
+		if (!typed) {
+			throw RuleError{ std::format("\"{}\" is not {} (form type {})", a_ref, a_kind, static_cast<int>(form->GetFormType())) };
+		}
+		return typed;
+	}
+
+	// A form condition: one "Plugin.esp|0xID" string, or a list of them
+	template <class T>
+	void ReadForms(const json& a_value, std::string_view a_key, std::string_view a_kind, std::vector<T*>& a_out)
+	{
+		const auto list = a_value.is_array() ? a_value : json::array({ a_value });
+		for (const auto& entry : list) {
+			if (!entry.is_string()) {
+				throw RuleError{ std::format("\"{}\": expected \"Plugin.esp|0xID\" or a list of them", a_key) };
+			}
+			if (const auto form = ResolveAs<T>(entry.get<std::string>(), a_kind)) {
+				a_out.push_back(form);
+			}
+		}
+	}
+
+	// "faction": "Plugin.esp|0xID", { "form": "...", "minRank": 1 }, or a list of either
+	void ReadFactions(const json& a_value, std::vector<Rules::FactionCondition>& a_out)
+	{
+		const auto list = a_value.is_array() ? a_value : json::array({ a_value });
+		for (const auto& entry : list) {
+			Rules::FactionCondition condition;
+			std::string ref;
+			if (entry.is_string()) {
+				ref = entry.get<std::string>();
+			} else if (entry.is_object() && entry.contains("form") && entry["form"].is_string()) {
+				ref = entry["form"].get<std::string>();
+				if (entry.contains("minRank")) {
+					if (!entry["minRank"].is_number_integer()) {
+						throw RuleError{ "\"faction\": \"minRank\" must be a whole number" };
+					}
+					condition.minRank = entry["minRank"].get<std::int32_t>();
+				}
+			} else {
+				throw RuleError{ "\"faction\": expected \"Plugin.esp|0xID\", { \"form\": ..., \"minRank\": ... } or a list of them" };
+			}
+			condition.faction = ResolveAs<RE::TESFaction>(ref, "a faction");
+			if (condition.faction) {
+				a_out.push_back(condition);
+			}
+		}
+	}
+
+	// A "requires" or "not" block
+	Rules::Conditions ReadConditions(const json& a_block, std::string_view a_blockName, bool a_isRequirement)
+	{
+		Rules::Conditions conditions;
+		if (!a_block.is_object()) {
+			throw RuleError{ std::format("\"{}\" must be an object", a_blockName) };
+		}
+
+		const std::pair<std::string_view, std::optional<bool> Rules::Conditions::*> flags[] = {
+			{ "alive", &Rules::Conditions::alive },
+			{ "teammate", &Rules::Conditions::teammate },
+			{ "essential", &Rules::Conditions::essential },
+			{ "protected", &Rules::Conditions::protectedFlag },
+			{ "bleedingOut", &Rules::Conditions::bleedingOut },
+			{ "unconscious", &Rules::Conditions::unconscious },
+			{ "sitting", &Rules::Conditions::sitting },
+			{ "sleeping", &Rules::Conditions::sleeping },
+			{ "inCombat", &Rules::Conditions::inCombat },
+		};
+
+		for (const auto& [key, value] : a_block.items()) {
+			// a form list that lost every entry to missing plugins can never hold
+			const auto requireSome = [&](std::size_t a_count) {
+				if (a_isRequirement && a_count == 0) {
+					throw RuleError{ std::format("\"{}\": none of the listed forms' plugins are loaded", key) };
+				}
+			};
+
+			if (key == "item") {
+				ReadForms(value, key, "an item", conditions.items);
+				requireSome(conditions.items.size());
+			} else if (key == "keyword") {
+				ReadForms(value, key, "a keyword", conditions.keywords);
+				requireSome(conditions.keywords.size());
+			} else if (key == "faction") {
+				ReadFactions(value, conditions.factions);
+				requireSome(conditions.factions.size());
+			} else if (key == "race") {
+				ReadForms(value, key, "a race", conditions.races);
+				requireSome(conditions.races.size());
+			} else if (key == "npc") {
+				ReadForms(value, key, "an NPC", conditions.npcs);
+				requireSome(conditions.npcs.size());
+			} else if (const auto flag = std::ranges::find_if(flags, [&](const auto& a_flag) { return a_flag.first == key; }); flag != std::end(flags)) {
+				if (!value.is_boolean()) {
+					throw RuleError{ std::format("\"{}\" must be true or false", key) };
+				}
+				conditions.*(flag->second) = value.get<bool>();
+			} else {
+				throw RuleError{ std::format("unknown condition \"{}\" in \"{}\"", key, a_blockName) };
+			}
+		}
+		return conditions;
+	}
+
+	std::optional<Rules::Action> ReadAction(const json& a_json)
 	{
 		if (!a_json.is_object() || !a_json.contains("label")) {
 			return std::nullopt;
@@ -53,52 +168,129 @@ namespace
 	void LoadFile(const std::filesystem::path& a_path)
 	{
 		const auto file = a_path.filename().string();
-		nlohmann::json root;
+		json root;
 		try {
 			std::ifstream in(a_path);
-			root = nlohmann::json::parse(in, nullptr, true, true);  // allow comments
+			root = json::parse(in, nullptr, true, true);  // allow comments
 		} catch (const std::exception& e) {
 			logger::error("{}: not valid JSON ({})", file, e.what());
 			return;
 		}
 
 		std::size_t loaded = 0;
-		for (const auto& entry : root.value("rules", nlohmann::json::array())) {
+		for (const auto& entry : root.value("rules", json::array())) {
 			Rules::Rule rule;
 			rule.file = file;
 			rule.id = entry.value("id", "?");
-			rule.priority = entry.value("priority", 0);
-
-			if (entry.value("target", "npc") != "npc") {
-				logger::warn("{} / {}: only \"target\": \"npc\" is supported, skipped", file, rule.id);
-				continue;
-			}
-			auto primary = ReadAction(entry.value("primary", nlohmann::json{}));
-			if (!primary) {
-				logger::warn("{} / {}: missing \"primary\" with a \"label\", skipped", file, rule.id);
-				continue;
-			}
-			rule.primary = std::move(*primary);
-			rule.alternate = ReadAction(entry.value("alternate", nlohmann::json{}));
-
-			const auto requirements = entry.value("requires", nlohmann::json::object());
-			if (requirements.contains("item")) {
-				const auto ref = requirements["item"].get<std::string>();
-				std::string why;
-				rule.requiredItem = ResolveForm(ref, why);
-				if (!rule.requiredItem) {
-					logger::warn("{} / {}: item \"{}\" not usable: {}, skipped", file, rule.id, ref, why);
-					continue;
+			currentRule = std::format("{} / {}", file, rule.id);
+			try {
+				rule.priority = entry.value("priority", 0);
+				if (entry.value("target", "npc") != "npc") {
+					throw RuleError{ "only \"target\": \"npc\" is supported" };
 				}
-			}
-			if (requirements.contains("alive")) {
-				rule.requiredAlive = requirements["alive"].get<bool>();
+				auto primary = ReadAction(entry.value("primary", json{}));
+				if (!primary) {
+					throw RuleError{ "missing \"primary\" with a \"label\"" };
+				}
+				rule.primary = std::move(*primary);
+				rule.alternate = ReadAction(entry.value("alternate", json{}));
+				if (entry.contains("requires")) {
+					rule.requirements = ReadConditions(entry["requires"], "requires", true);
+				}
+				if (entry.contains("not")) {
+					rule.exclusions = ReadConditions(entry["not"], "not", false);
+				}
+			} catch (const RuleError& e) {
+				logger::warn("{} / {}: {}, rule skipped", file, rule.id, e.what);
+				continue;
+			} catch (const std::exception& e) {
+				logger::warn("{} / {}: {}, rule skipped", file, rule.id, e.what());
+				continue;
 			}
 
 			rules.push_back(std::move(rule));
 			++loaded;
 		}
 		logger::info("{}: {} rule(s) loaded", file, loaded);
+	}
+
+	// Lazily counted inventory, shared by every rule checked for one actor
+	class Inventory
+	{
+	public:
+		explicit Inventory(RE::Actor* a_actor) :
+			actor(a_actor) {}
+
+		bool Carries(RE::TESBoundObject* a_item)
+		{
+			if (!counts) {
+				counts = actor->GetInventoryCounts([](RE::TESBoundObject& a_object) {
+					return std::ranges::any_of(rules, [&](const Rules::Rule& r) {
+						return std::ranges::contains(r.requirements.items, &a_object) || std::ranges::contains(r.exclusions.items, &a_object);
+					});
+				});
+			}
+			const auto it = counts->find(a_item);
+			return it != counts->end() && it->second > 0;
+		}
+
+	private:
+		RE::Actor*                                         actor;
+		std::optional<RE::TESObjectREFR::InventoryCountMap> counts;
+	};
+
+	// a_all: every set condition must hold ("requires"); otherwise: does any set condition hold ("not")
+	bool Check(const Rules::Conditions& a_conditions, RE::Actor* a_actor, Inventory& a_inventory, bool a_all)
+	{
+		const auto state = a_actor->AsActorState();
+		const auto flag = [](const std::optional<bool>& a_wanted, auto&& a_actual) -> std::optional<bool> {
+			if (!a_wanted) {
+				return std::nullopt;
+			}
+			return a_actual() == *a_wanted;
+		};
+		const auto anyOf = [](const auto& a_list, auto&& a_holds) -> std::optional<bool> {
+			if (a_list.empty()) {
+				return std::nullopt;
+			}
+			return std::ranges::any_of(a_list, a_holds);
+		};
+
+		// cheapest first; each yields nullopt (not set), true (holds) or false
+		const std::function<std::optional<bool>()> tests[] = {
+			[&] { return flag(a_conditions.alive, [&] { return !a_actor->IsDead(); }); },
+			[&] { return flag(a_conditions.teammate, [&] { return a_actor->IsPlayerTeammate(); }); },
+			[&] { return flag(a_conditions.essential, [&] { return a_actor->IsEssential(); }); },
+			[&] { return flag(a_conditions.protectedFlag, [&] { return a_actor->IsProtected(); }); },
+			[&] { return flag(a_conditions.bleedingOut, [&] { return state && state->IsBleedingOut(); }); },
+			[&] { return flag(a_conditions.unconscious, [&] { return state && state->IsUnconscious(); }); },
+			[&] { return flag(a_conditions.sitting, [&] { return state && state->IsSitting(); }); },
+			[&] { return flag(a_conditions.sleeping, [&] { return state && state->GetSitSleepState() == RE::SIT_SLEEP_STATE::kIsSleeping; }); },
+			[&] { return flag(a_conditions.inCombat, [&] { return a_actor->IsInCombat(); }); },
+			[&] { return anyOf(a_conditions.npcs, [&](RE::TESNPC* a_npc) { return a_actor->GetActorBase() == a_npc || a_actor->GetTemplateBase() == a_npc; }); },
+			[&] { return anyOf(a_conditions.races, [&](RE::TESRace* a_race) { return a_actor->GetRace() == a_race; }); },
+			[&] { return anyOf(a_conditions.keywords, [&](RE::BGSKeyword* a_keyword) {
+					  const auto race = a_actor->GetRace();
+					  return a_actor->HasKeyword(a_keyword) || (race && race->HasKeyword(a_keyword));
+				  }); },
+			[&] { return anyOf(a_conditions.factions, [&](const Rules::FactionCondition& a_faction) {
+					  return a_actor->IsInFaction(a_faction.faction) &&
+				             (!a_faction.minRank || a_actor->GetFactionRank(a_faction.faction, a_actor->IsPlayerRef()) >= *a_faction.minRank);
+				  }); },
+			[&] { return anyOf(a_conditions.items, [&](RE::TESBoundObject* a_item) { return a_inventory.Carries(a_item); }); },
+		};
+
+		for (const auto& test : tests) {
+			if (const auto result = test()) {
+				if (a_all && !*result) {
+					return false;
+				}
+				if (!a_all && *result) {
+					return true;
+				}
+			}
+		}
+		return a_all;
 	}
 }
 
@@ -126,28 +318,11 @@ namespace Rules
 		if (!a_actor || rules.empty()) {
 			return nullptr;
 		}
-		const bool dead = a_actor->IsDead();
-
-		// Inventory is only counted once, and only if some rule needs an item
-		std::optional<RE::TESObjectREFR::InventoryCountMap> counts;
-		const auto carries = [&](RE::TESBoundObject* a_item) {
-			if (!counts) {
-				counts = a_actor->GetInventoryCounts([](RE::TESBoundObject& a_object) {
-					return std::ranges::any_of(rules, [&](const Rule& r) { return r.requiredItem == &a_object; });
-				});
-			}
-			const auto it = counts->find(a_item);
-			return it != counts->end() && it->second > 0;
-		};
-
+		Inventory inventory(a_actor);
 		for (const auto& rule : rules) {
-			if (rule.requiredAlive && *rule.requiredAlive == dead) {
-				continue;
+			if (Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+				return &rule;
 			}
-			if (rule.requiredItem && !carries(rule.requiredItem)) {
-				continue;
-			}
-			return &rule;
 		}
 		return nullptr;
 	}
