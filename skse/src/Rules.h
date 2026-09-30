@@ -1,6 +1,6 @@
 #pragma once
 
-// Activation rules, one JSON file per mod in Data/SKSE/Plugins/eXModifierFramework/*.json:
+// Activation rules, one JSON file per mod in Data/SKSE/Plugins/ModifierKeyFramework/*.json:
 //
 // {
 //   "rules": [{

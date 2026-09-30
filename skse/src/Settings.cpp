@@ -4,7 +4,7 @@
 
 namespace
 {
-	constexpr auto INI_PATH = "Data/SKSE/Plugins/eXModifierFramework.ini";
+	constexpr auto INI_PATH = "Data/SKSE/Plugins/ModifierKeyFramework.ini";
 
 	std::uint32_t modifierKey = 42;  // Left Shift
 	std::int32_t  modifierKeyGamepad = 274;  // Left Shoulder

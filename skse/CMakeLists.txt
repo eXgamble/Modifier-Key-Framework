@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(eXModifierFramework VERSION 0.1.0 LANGUAGES CXX)
+project(ModifierKeyFramework VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,7 +17,7 @@ if(NOT COMMAND add_commonlibsse_plugin)
 endif()
 
 add_commonlibsse_plugin(${PROJECT_NAME}
-	NAME "eXModifierFramework"
+	NAME "ModifierKeyFramework"
 	AUTHOR "eXgamble"
 	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp)
 
@@ -33,7 +33,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE src/PCH.h)
 
 # Copy the DLL into the mod after every build (the MO2 mod folder is a junction to ../mod).
 # The PDB (debug symbols) is not shipped: it stays in build/release for reading crash logs.
-set(DEPLOY_DIR "C:/Modding/MO2/mods/eX Modifier Framework/SKSE/Plugins")
+set(DEPLOY_DIR "C:/Modding/MO2/mods/Modifier Key Framework/SKSE/Plugins")
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E make_directory "${DEPLOY_DIR}"
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:${PROJECT_NAME}>" "${DEPLOY_DIR}"

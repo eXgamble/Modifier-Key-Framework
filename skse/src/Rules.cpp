@@ -4,7 +4,7 @@
 
 namespace
 {
-	constexpr auto RULES_DIR = "Data/SKSE/Plugins/eXModifierFramework";
+	constexpr auto RULES_DIR = "Data/SKSE/Plugins/ModifierKeyFramework";
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 

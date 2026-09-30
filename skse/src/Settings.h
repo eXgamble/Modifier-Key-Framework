@@ -1,6 +1,6 @@
 #pragma once
 
-// Data/SKSE/Plugins/eXModifierFramework.ini
+// Data/SKSE/Plugins/ModifierKeyFramework.ini
 namespace Settings
 {
 	void Load();

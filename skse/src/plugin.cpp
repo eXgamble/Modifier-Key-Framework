@@ -1,4 +1,4 @@
-// eX Modifier Framework: SKSE plugin.
+// Modifier Key Framework: SKSE plugin.
 // Mods declare activation rules for NPCs in JSON; the framework shows the prompt (and, in later
 // steps, runs the actions and handles the shared modifier key).
 
@@ -16,7 +16,7 @@ namespace
 		if (!path) {
 			SKSE::stl::report_and_fail("Failed to find the SKSE log directory"sv);
 		}
-		*path /= "eXModifierFramework.log"sv;
+		*path /= "ModifierKeyFramework.log"sv;
 
 		auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
 		auto log = std::make_shared<spdlog::logger>("global log"s, std::move(sink));
@@ -39,12 +39,12 @@ namespace
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	InitializeLog();
-	logger::info("eXModifierFramework loading on game runtime {}", a_skse->RuntimeVersion().string("."));
+	logger::info("ModifierKeyFramework loading on game runtime {}", a_skse->RuntimeVersion().string("."));
 
 	SKSE::Init(a_skse, false);
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
 	Hooks::Install();
 
-	logger::info("eXModifierFramework loaded");
+	logger::info("ModifierKeyFramework loaded");
 	return true;
 }

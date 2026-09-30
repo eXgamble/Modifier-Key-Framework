@@ -1,4 +1,4 @@
-# eX Modifier Framework
+# Modifier Key Framework
 
 An SKSE framework for Skyrim Anniversary Edition (1.6.x and 1.7.x) that lets mods add their own
 activation actions to NPCs, declared in simple JSON files, with one shared **modifier key** for a
@@ -13,7 +13,7 @@ second action. Replaces per-mod perk activation tricks and Dynamic Activation Ke
 
 ## For mod authors: rule files
 
-Put one JSON file per mod in `SKSE/Plugins/eXModifierFramework/` (comments allowed):
+Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allowed):
 
 ```jsonc
 {
@@ -41,7 +41,7 @@ Put one JSON file per mod in `SKSE/Plugins/eXModifierFramework/` (comments allow
 
 ## Settings
 
-`SKSE/Plugins/eXModifierFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
+`SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
 a gamepad button, and the alternate-action marker.
 
 ## Building
