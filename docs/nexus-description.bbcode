@@ -9,6 +9,14 @@ A small SKSE framework that lets mods add their own actions when you activate an
 
 [b]For mod authors:[/b] a lightweight alternative to perk-based activation and Dynamic Activation Key. Declare a rule in JSON, handle an event in Papyrus, done.
 
+[size=5][b]Why I made this[/b][/size]
+I used Dynamic Activation Key for my own mods, and two things kept bothering me:
+[list]
+[*][b]The prompt lost the name.[/b] A DAK action replaces the whole activation prompt, so instead of [i]Search[/i] above [i]Lydia[/i] you only get [i]Search[/i]. You can't tell at a glance who or what you're about to act on, which I found really frustrating.
+[*][b]There's no hint that a second action exists.[/b] Nothing on screen tells you that holding a key does something different, so players either read the mod page or never find out. That's bad UX.
+[/list]
+So Modifier Key Framework keeps the vanilla two-line prompt with the name underneath, and shows a small [b]+[/b] whenever a second action is available.
+
 [size=5][b]What you see in game[/b][/size]
 The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
 [list]
@@ -57,7 +65,8 @@ Full documentation, a complete example mod and a [b]Coming from Dynamic Activati
 [size=5][b]Compared with Dynamic Activation Key[/b][/size]
 [list]
 [*][b]No plugin, no perk:[/b] a rule file instead of perk entry points, conditions and perk distribution; your plugin doesn't have to master anything.
-[*][b]Players can see the second action[/b] (the [b]+[/b] marker).
+[*][b]The name stays on the prompt:[/b] [i]Search[/i] above [i]Lydia[/i], like vanilla, where a DAK action shows only [i]Search[/i].
+[*][b]Players can see that a second action exists:[/b] the [b]+[/b] marker ([i]Give Potion +[/i]). DAK gives no hint at all.
 [*][b]Two mods on one NPC[/b] are resolved by priority, deterministically, and logged.
 [*]DAK still has the Creation Kit's full condition set and works on more than NPCs. For conditions this framework doesn't have, give the NPC a keyword, faction or token item (SPID, KID, script) and require that.
 [/list]
