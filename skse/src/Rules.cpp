@@ -8,11 +8,13 @@ namespace
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
-	// "Plugin.esp|0x807" -> the form (local ID in that plugin, light plugins included)
-	RE::TESBoundObject* ResolveForm(const std::string& a_ref)
+	// "Plugin.esp|0x807" -> the form (local ID in that plugin, light plugins included).
+	// On failure, a_why says which part didn't resolve.
+	RE::TESBoundObject* ResolveForm(const std::string& a_ref, std::string& a_why)
 	{
 		const auto bar = a_ref.find('|');
 		if (bar == std::string::npos) {
+			a_why = "expected \"Plugin.esp|0xID\"";
 			return nullptr;
 		}
 		const auto plugin = a_ref.substr(0, bar);
@@ -20,9 +22,24 @@ namespace
 		try {
 			localID = static_cast<RE::FormID>(std::stoul(a_ref.substr(bar + 1), nullptr, 16));
 		} catch (...) {
+			a_why = std::format("\"{}\" is not a hex form ID", a_ref.substr(bar + 1));
 			return nullptr;
 		}
-		return RE::TESDataHandler::GetSingleton()->LookupForm<RE::TESBoundObject>(localID, plugin);
+		const auto dataHandler = RE::TESDataHandler::GetSingleton();
+		if (!dataHandler->LookupModByName(plugin)) {
+			a_why = std::format("plugin \"{}\" is not loaded", plugin);
+			return nullptr;
+		}
+		const auto form = dataHandler->LookupForm(localID, plugin);
+		if (!form) {
+			a_why = std::format("plugin \"{}\" has no form {:06X}", plugin, localID);
+			return nullptr;
+		}
+		const auto object = form->As<RE::TESBoundObject>();
+		if (!object) {
+			a_why = std::format("form {:08X} in \"{}\" is not an item (form type {})", form->GetFormID(), plugin, static_cast<int>(form->GetFormType()));
+		}
+		return object;
 	}
 
 	std::optional<Rules::Action> ReadAction(const nlohmann::json& a_json)
@@ -67,9 +84,10 @@ namespace
 			const auto requirements = entry.value("requires", nlohmann::json::object());
 			if (requirements.contains("item")) {
 				const auto ref = requirements["item"].get<std::string>();
-				rule.requiredItem = ResolveForm(ref);
+				std::string why;
+				rule.requiredItem = ResolveForm(ref, why);
 				if (!rule.requiredItem) {
-					logger::warn("{} / {}: item \"{}\" not found (plugin not loaded?), skipped", file, rule.id, ref);
+					logger::warn("{} / {}: item \"{}\" not usable: {}, skipped", file, rule.id, ref, why);
 					continue;
 				}
 			}
