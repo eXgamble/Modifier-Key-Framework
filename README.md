@@ -41,6 +41,24 @@ Put one JSON file per mod in `SKSE/Plugins/ModifierKeyFramework/` (comments allo
 | `alternate` | optional second action, used while the modifier key is held |
 | `priority` | when several rules match, the highest wins (default 0) |
 
+### Translated labels
+
+A label can be a `$Key` instead of plain text. Keys are looked up in
+`Interface/Translations/<name>_<LANGUAGE>.txt` (the usual UTF-16 LE file with a BOM, one
+`$Key<TAB>Text` per line, as used by MCM Helper and SkyUI), where `<name>` is the rule file's name
+without `.json`. To reuse an existing file, such as your MCM's, name it at the top of the rule file:
+
+```jsonc
+{
+  "translations": "Death Timer - Immersive Bleedout",  // Interface/Translations/Death Timer - Immersive Bleedout_ENGLISH.txt
+  "rules": [
+    { "id": "downed", "primary": { "label": "$ANDR_KO_Prompt_GivePotion", "event": "DeathTimer_GivePotion" } }
+  ]
+}
+```
+
+A key that isn't found is shown as is (`$ANDR_KO_Prompt_GivePotion`), with a warning in the log.
+
 ### When rules compete
 
 Only one rule runs per NPC: the matching rule with the highest `priority`. On a tie, the rule from

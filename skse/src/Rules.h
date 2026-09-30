@@ -14,6 +14,9 @@
 //   }]
 // }
 //
+// Labels can be "$Key"s, looked up in Interface/Translations/<name>_<LANGUAGE>.txt, where <name> is
+// the rule file's name, or the file's top-level "translations" value.
+//
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
 // match, the highest priority wins.
@@ -21,8 +24,14 @@ namespace Rules
 {
 	struct Action
 	{
-		std::string label;
+		std::string label;  // plain text, or "$Key" from Interface/Translations
 		std::string event;
+
+		// The label to show: a "$Key" translated (on first use, then cached), plain text as is
+		const std::string& Text() const;
+
+	private:
+		mutable std::optional<std::string> text;
 	};
 
 	struct FactionCondition

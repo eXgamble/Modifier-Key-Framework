@@ -162,7 +162,20 @@ namespace
 		if (!a_json.is_object() || !a_json.contains("label")) {
 			return std::nullopt;
 		}
-		return Rules::Action{ a_json.value("label", ""), a_json.value("event", "") };
+		Rules::Action action;
+		action.label = a_json.value("label", "");
+		action.event = a_json.value("event", "");
+		return action;
+	}
+
+	// Interface/Translations/<name>_<LANGUAGE>.txt into the game's translation table (SKSE itself
+	// only loads files named after a plugin; a framework mod may have none). Each name once.
+	void LoadTranslations(const std::string& a_name)
+	{
+		static std::set<std::string> loaded;
+		if (loaded.insert(a_name).second) {
+			SKSE::Translation::ParseTranslation(a_name);
+		}
 	}
 
 	void LoadFile(const std::filesystem::path& a_path)
@@ -176,6 +189,8 @@ namespace
 			logger::error("{}: not valid JSON ({})", file, e.what());
 			return;
 		}
+
+		LoadTranslations(root.value("translations", a_path.stem().string()));
 
 		std::size_t loaded = 0;
 		for (const auto& entry : root.value("rules", json::array())) {
@@ -296,6 +311,22 @@ namespace
 
 namespace Rules
 {
+	const std::string& Action::Text() const
+	{
+		if (!text) {
+			std::string translated;
+			if (!label.starts_with('$')) {
+				text = label;
+			} else if (SKSE::Translation::Translate(label, translated)) {
+				text = std::move(translated);
+			} else {
+				logger::warn("No translation for label \"{}\" (Interface/Translations), shown as is", label);
+				text = label;
+			}
+		}
+		return *text;
+	}
+
 	void Load()
 	{
 		rules.clear();

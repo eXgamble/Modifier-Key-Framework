@@ -26,7 +26,7 @@ namespace
 			auto actor = a_activator ? a_activator->As<RE::Actor>() : nullptr;
 			if (const auto rule = Rules::Match(actor)) {
 				const auto& action = CurrentAction(*rule);
-				std::string label = action.label;
+				std::string label = action.Text();
 				if (rule->alternate && &action == &rule->primary && !Settings::AlternateMarker().empty()) {
 					label += " " + Settings::AlternateMarker();
 				}
