@@ -70,7 +70,9 @@ namespace
 					Rules::ReportConflicts(actor, rule);
 					if (const auto& action = CurrentAction(*rule); !action.event.empty()) {
 						SendRuleEvent(*rule, action, a_targetRef);
-						return true;
+						// "Not activated": with true, the game's activation code goes on to
+						// mount a horse (riding isn't part of this function, unlike dialogue)
+						return false;
 					}
 				}
 			}
