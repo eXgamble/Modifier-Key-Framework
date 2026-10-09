@@ -177,7 +177,7 @@ namespace
 		return field;
 	}
 
-	constexpr std::array<const char*, 3> FIELDS{ "mkfButton2", "mkfButton3", "mkfModifier" };
+	constexpr std::array<const char*, 4> FIELDS{ "mkfButton2", "mkfButton3", "mkfModifier", "mkfSeparator" };
 
 	void HideFields(RE::GFxValue& a_button)
 	{
@@ -245,12 +245,51 @@ namespace
 		return true;
 	}
 
-	// The modifier key's button right of the label's line, as far from the text as the Activate
-	// button is on the left; without an image for that key, the ini's text marker instead
+	// The width of the image in a field's HTML (its IMG tag's WIDTH)
+	double ImageWidth(const std::string& a_html)
+	{
+		const auto tag = ImageTag(a_html);
+		const auto at = tag.find("WIDTH=\"");
+		return at == std::string::npos ? 0.0 : std::atof(tag.c_str() + at + 7);
+	}
+
+	// The separator between the modifier key's button and the Activate button, in the prompt's font
+	RE::GFxValue Separator(RE::GFxValue& a_button, RE::GFxValue& a_text)
+	{
+		RE::GFxValue parent;
+		a_button.GetMember("_parent", &parent);
+		RE::GFxValue field;
+		parent.GetMember("mkfSeparator", &field);
+		if (field.IsUndefined() || field.IsNull()) {
+			RE::GFxValue depth;
+			parent.Invoke("getNextHighestDepth", &depth);
+			std::array<RE::GFxValue, 6> args{
+				RE::GFxValue("mkfSeparator"), depth, RE::GFxValue(0.0), RE::GFxValue(0.0),
+				RE::GFxValue(40.0), RE::GFxValue(Number(a_text, "_height"))
+			};
+			parent.Invoke("createTextField", nullptr, args.data(), args.size());
+			parent.GetMember("mkfSeparator", &field);
+			field.SetMember("selectable", RE::GFxValue(false));
+			field.SetMember("embedFonts", RE::GFxValue(true));
+			field.SetMember("html", RE::GFxValue(true));
+			field.SetMember("autoSize", RE::GFxValue("left"));
+		}
+		// the prompt's own font (face, size, colour): the first FONT tag of its HTML
+		const auto html = HtmlOf(a_text);
+		const auto start = html.find("<FONT");
+		const auto end = start == std::string::npos ? std::string::npos : html.find('>', start);
+		const auto separator = EscapeHtml(Settings::ModifierSeparator());
+		const auto text = end == std::string::npos ? separator : html.substr(start, end - start + 1) + separator + "</FONT>";
+		field.SetMember("htmlText", RE::GFxValue(text.c_str()));
+		return field;
+	}
+
+	// The modifier key's button left of the Activate button: "[LB] | [A] Search". Same gaps as between
+	// the Activate button and the text. Without an image for that key, the ini's text marker instead.
 	void ShowModifier(RE::GFxValue& a_hud, RE::GFxValue& a_text, RE::GFxValue& a_button, const RE::GFxValue& a_name)
 	{
 		auto field = Field(a_button, "mkfModifier");
-		if (!ShowArt(a_hud, a_button, field, ModifierArt(ActivateArt(a_button)), true)) {
+		if (!ShowArt(a_hud, a_button, field, ModifierArt(ActivateArt(a_button)))) {
 			if (!Settings::AlternateMarker().empty()) {
 				std::string html = a_name.GetString();
 				html.insert(std::min(html.find('\n'), html.size()), " " + EscapeHtml(Settings::AlternateMarker()));
@@ -259,10 +298,18 @@ namespace
 			}
 			return;
 		}
+		// both button fields are right-aligned: a field's right edge is its image's right edge
 		const auto line = GetLine(a_text, 0);
-		const double textX = Number(a_text, "_x") + line.x;
-		const double gap = textX - (Number(a_button, "_x") + Number(a_button, "_width"));
-		Place(field, a_button, textX + line.width + gap, Number(a_button, "_y"));
+		const double buttonRight = Number(a_button, "_x") + Number(a_button, "_width");
+		const double gap = Number(a_text, "_x") + line.x - buttonRight;
+		double right = buttonRight - ImageWidth(HtmlOf(a_button)) - gap;  // left of the Activate image
+		if (!Settings::ModifierSeparator().empty()) {
+			auto separator = Separator(a_button, a_text);
+			const double width = Number(separator, "_width");
+			Place(separator, a_button, right - width, Number(a_text, "_y"));
+			right -= width + gap;
+		}
+		Place(field, a_button, right - Number(a_button, "_width"), Number(a_button, "_y"));
 	}
 
 	void Apply(RE::GFxValue& a_hud, bool a_activate, const RE::GFxValue& a_name)

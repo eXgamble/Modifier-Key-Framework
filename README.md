@@ -6,8 +6,9 @@ second action. An alternative to perk-based activation and Dynamic Activation Ke
 perk, no script needed just to show a prompt.
 
 - The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
-- When a second action is available, the modifier key's button appears after the label, the same
-  image the HUD uses for its own buttons: `[A] Give Potion [LB]` / `Lydia` (keyboard: `[E] Give Potion [Shift]`).
+- When a second action is available, the modifier key's button appears in front of the Activate
+  button, the same images the HUD uses for its own buttons: `[LB] | [A] Give Potion` / `Lydia`
+  (keyboard: `[Shift] | [E] Give Potion`).
   Holding the modifier key switches it to the second action: `[A] Search` / `Lydia`.
 - One key for every mod that uses the framework (default Left Shift, Left Shoulder on a gamepad).
 - Up to three actions on the modifier key: while it's held, the prompt shows one line per action,
@@ -167,7 +168,7 @@ them in order of importance; the framework gives out the buttons by position, th
 
 X and Y are the game controls in the framework's ini (default Ready Weapon and Jump: X and Y on a
 controller, R and Space on a keyboard), so the player's own key bindings apply. Without the modifier
-key the prompt looks as always (`[A] Search [LB]` / `Deer`); while it's held, the actions stack up like a
+key the prompt looks as always (`[LB] | [A] Search` / `Deer`); while it's held, the actions stack up like a
 controller's face buttons:
 
 ```
@@ -273,8 +274,8 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 
 `SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
 a gamepad button (default Left Shoulder), whether the prompt shows the modifier key's button
-(`bModifierIcon`, default on) or a text marker (`sAlternateMarker`, default `+`, also the fallback for
-a HUD without that button's image), and the
+(`bModifierIcon`, default on, with `sModifierSeparator`, default `|`) or a text marker
+(`sAlternateMarker`, default `+`, also the fallback for a HUD without that button's image), and the
 game controls for the second and third modifier action (`sSlot2Control`, default Ready Weapon;
 `sSlot3Control`, default Jump; also possible: Sneak, Shout, Auto-Move, Toggle Always Run).
 
