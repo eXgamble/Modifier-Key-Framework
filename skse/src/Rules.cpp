@@ -10,7 +10,8 @@ namespace
 
 	// Rule files may say which format they're written for ("version"); newer ones are refused
 	// instead of half-understood. Files without it are version 1.
-	constexpr std::int32_t RULE_FORMAT_VERSION = 1;
+	// 2 (1.1.0): "primary" and its "label" are optional (no label = the game's own prompt text).
+	constexpr std::int32_t RULE_FORMAT_VERSION = 2;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
@@ -171,20 +172,22 @@ namespace
 		}
 	}
 
-	// "primary" / "alternate": { "label": "...", "event": "..." } (event optional)
-	Rules::Action ReadAction(const json& a_json, std::string_view a_name)
+	// "primary" / "alternate": { "label": "...", "event": "..." } (event optional; the primary's
+	// label too: without one the prompt keeps the game's own text, e.g. "Search" on a dead body)
+	Rules::Action ReadAction(const json& a_json, std::string_view a_name, bool a_labelRequired)
 	{
-		if (a_json.is_object()) {
-			CheckKeys(a_json, { "label", "event" }, std::format("\"{}\"", a_name));
+		if (!a_json.is_object()) {
+			throw RuleError{ std::format("\"{}\" must be an object", a_name) };
 		}
-		if (!a_json.is_object() || !a_json.contains("label") || !a_json["label"].is_string()) {
+		CheckKeys(a_json, { "label", "event" }, std::format("\"{}\"", a_name));
+		if (a_json.contains("label") ? !a_json["label"].is_string() || a_json["label"].get<std::string>().empty() : a_labelRequired) {
 			throw RuleError{ std::format("\"{}\" needs a \"label\" (text)", a_name) };
 		}
 		if (a_json.contains("event") && !a_json["event"].is_string()) {
 			throw RuleError{ std::format("\"{}\": \"event\" must be text", a_name) };
 		}
 		Rules::Action action;
-		action.label = a_json["label"].get<std::string>();
+		action.label = a_json.value("label", "");
 		action.event = a_json.value("event", "");
 		return action;
 	}
@@ -256,9 +259,12 @@ namespace
 				if (entry.value("target", "npc") != "npc") {
 					throw RuleError{ "only \"target\": \"npc\" is supported" };
 				}
-				rule.primary = ReadAction(entry.value("primary", json{}), "primary");
+				rule.primary = ReadAction(entry.value("primary", json::object()), "primary", false);
 				if (entry.contains("alternate")) {
-					rule.alternate = ReadAction(entry["alternate"], "alternate");
+					rule.alternate = ReadAction(entry["alternate"], "alternate", true);
+				}
+				if (rule.primary.label.empty() && rule.primary.event.empty() && !rule.alternate) {
+					throw RuleError{ "the rule changes nothing: give it a primary label or event, or an alternate" };
 				}
 				if (entry.contains("requires")) {
 					rule.requirements = ReadConditions(entry["requires"], "requires", true);

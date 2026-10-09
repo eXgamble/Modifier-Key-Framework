@@ -9,9 +9,9 @@
   "properties": {
     "$schema": { "type": "string" },
     "version": {
-      "description": "Rule format version this file is written for. Files without it are version 1.",
+      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional.",
       "type": "integer",
-      "enum": [1]
+      "enum": [1, 2]
     },
     "translations": {
       "description": "Name of the translation file for $Key labels: Interface/Translations/<name>_<LANGUAGE>.txt. Default: this file's name without .json.",
@@ -26,7 +26,7 @@
   "definitions": {
     "rule": {
       "type": "object",
-      "required": ["id", "primary"],
+      "required": ["id"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -49,12 +49,12 @@
           "$ref": "#/definitions/conditions"
         },
         "primary": {
-          "description": "The action when activating normally.",
+          "description": "The action when activating normally. Without a label the prompt keeps the game's own text (e.g. Search). Optional (version 2).",
           "$ref": "#/definitions/action"
         },
         "alternate": {
-          "description": "The action while the modifier key is held. Adds the marker (default '+') to the primary label.",
-          "$ref": "#/definitions/action"
+          "description": "The action while the modifier key is held. Adds the marker (default '+') to the primary label. Needs a label.",
+          "allOf": [{ "$ref": "#/definitions/action" }, { "required": ["label"] }]
         },
         "priority": {
           "description": "When several rules match, the highest wins; ties go to the file name that sorts first.",
@@ -70,7 +70,6 @@
     },
     "action": {
       "type": "object",
-      "required": ["label"],
       "additionalProperties": false,
       "properties": {
         "label": {

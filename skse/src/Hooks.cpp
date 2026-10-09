@@ -13,10 +13,18 @@ namespace
 		return (a_rule.alternate && Input::IsModifierHeld()) ? *a_rule.alternate : a_rule.primary;
 	}
 
+	// The first line of the game's own prompt ("Search" of "Search\nWolf")
+	std::string VanillaVerb(const RE::BSString& a_text)
+	{
+		const std::string_view text{ a_text.c_str() ? a_text.c_str() : "" };
+		return std::string{ text.substr(0, text.find('\n')) };
+	}
+
 	// The activation prompt: "<label>\n<name>", the same two lines as vanilla's "Talk\nLydia".
 	// When the matched rule also has an alternate action, the primary label gets the marker from
 	// the ini ("Give Potion +"), so players can tell a second action exists; while the modifier
 	// key is held the prompt shows the alternate label instead, without the marker.
+	// A primary without a label keeps the game's own first line ("Search" on a dead body, "Talk", ...).
 	struct GetActivateText
 	{
 		static bool thunk(RE::TESNPC* a_this, RE::TESObjectREFR* a_activator, RE::BSString& a_dst)
@@ -26,7 +34,7 @@ namespace
 			auto actor = a_activator ? a_activator->As<RE::Actor>() : nullptr;
 			if (const auto rule = Rules::Match(actor)) {
 				const auto& action = CurrentAction(*rule);
-				std::string label = action.Text();
+				std::string label = action.label.empty() ? VanillaVerb(a_dst) : action.Text();
 				if (rule->alternate && &action == &rule->primary && !Settings::AlternateMarker().empty()) {
 					label += " " + Settings::AlternateMarker();
 				}

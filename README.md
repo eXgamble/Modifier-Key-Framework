@@ -53,7 +53,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (currently `1`, the default). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default, or `2`: optional `primary`, framework 1.1.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -65,8 +65,8 @@ Each rule:
 | `target` | `"npc"` (only NPCs for now) |
 | `requires` | optional: conditions that must **all** hold (see [Conditions](#conditions)) |
 | `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
-| `primary` | `{ "label": ..., "event": ... }`: the label shown, and the SKSE mod event sent on activation. Without an `event`, only the label changes and activation stays vanilla |
-| `alternate` | optional second action, used while the modifier key is held |
+| `primary` | `{ "label": ..., "event": ... }`: the label shown, and the SKSE mod event sent on activation. Without an `event`, only the label changes and activation stays vanilla. Without a `label`, the prompt keeps the game's own text (`Search` on a dead body, `Talk`, in the player's language). Format `2`: `primary` itself is optional, `"primary": {}` or leaving it out keeps the activation fully vanilla |
+| `alternate` | optional second action, used while the modifier key is held; needs a `label` |
 | `priority` | when several rules match, the highest wins (default 0) |
 | `enabled` | optional, default `true`; `false` = off until a script turns it on (see [Papyrus API](#papyrus-api)) |
 
@@ -195,10 +195,11 @@ rule:
 
 ```jsonc
 {
+  "version": 2,
   "rules": [{
     "id": "search",
     "requires": { "keyword": "MyMod.esp|0x800", "alive": true },  // the perk's target conditions
-    "primary":   { "label": "Talk" },                                  // no event: vanilla talk
+    "primary":   {},                                                   // vanilla talk, vanilla label (format 2)
     "alternate": { "label": "Search", "event": "MyMod_Search" },      // was: the DAK-conditioned perk entry
     "priority": 20
   }]
