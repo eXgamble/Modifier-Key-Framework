@@ -44,11 +44,15 @@ namespace
 			auto actor = a_activator ? a_activator->As<RE::Actor>() : nullptr;
 			const auto rule = Rules::Match(actor);
 			if (!rule) {
-				Hud::ClearStack();
+				Hud::ClearPrompt();
 			} else {
 				const auto [action, index] = CurrentAction(*rule);
 				std::string label = action.label.empty() ? VanillaVerb(a_dst) : action.Text();
-				if (!rule->alternates.empty() && index == 0 && !Settings::AlternateMarker().empty()) {
+				// a modifier action exists: the HUD draws the modifier key's button after the label, or
+				// (ini, or no HUD) the text marker goes on the label itself
+				const bool marker = !rule->alternates.empty() && index == 0;
+				const bool iconMarker = marker && Settings::ModifierIcon() && Hud::Ready();
+				if (marker && !iconMarker && !Settings::AlternateMarker().empty()) {
 					label += " " + Settings::AlternateMarker();
 				}
 				// modifier held with more than one modifier action: the HUD shows the rest above
@@ -58,7 +62,7 @@ namespace
 						extra.push_back(rule->alternates[slot].Text());
 					}
 				}
-				Hud::SetStack(actor, std::move(extra));
+				Hud::SetPrompt(actor, iconMarker, std::move(extra));
 				const char* name = actor->GetDisplayFullName();
 				const std::string text = std::format("{}\n{}", label, name ? name : "");
 				a_dst = text.c_str();

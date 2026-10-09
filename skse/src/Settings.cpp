@@ -9,6 +9,7 @@ namespace
 	std::uint32_t modifierKey = 42;  // Left Shift
 	std::int32_t  modifierKeyGamepad = 274;  // Left Shoulder
 	std::string   alternateMarker = "+";
+	bool          modifierIcon = true;
 
 	const std::vector<std::string_view> supportedControls{ "Ready Weapon", "Jump", "Sneak", "Shout", "Auto-Move", "Toggle Always Run" };
 	std::array<RE::BSFixedString, 2>    slotControls{ "Ready Weapon", "Jump" };
@@ -37,6 +38,7 @@ namespace Settings
 			modifierKey = static_cast<std::uint32_t>(ini.GetLongValue("Settings", "iModifierKey", 42));
 			modifierKeyGamepad = static_cast<std::int32_t>(ini.GetLongValue("Settings", "iModifierKeyGamepad", 274));
 			alternateMarker = ini.GetValue("Settings", "sAlternateMarker", "+");
+			modifierIcon = ini.GetBoolValue("Settings", "bModifierIcon", true);
 			const auto slot2 = ReadControl(ini, "sSlot2Control", "Ready Weapon");
 			auto       slot3 = ReadControl(ini, "sSlot3Control", "Jump");
 			if (slot3 == slot2) {
@@ -51,6 +53,7 @@ namespace Settings
 	std::uint32_t ModifierKey() { return modifierKey; }
 	std::int32_t  ModifierKeyGamepad() { return modifierKeyGamepad; }
 	const std::string& AlternateMarker() { return alternateMarker; }
+	bool               ModifierIcon() { return modifierIcon; }
 	const RE::BSFixedString& SlotControl(std::size_t a_slot) { return slotControls[std::clamp<std::size_t>(a_slot, 2, 3) - 2]; }
 	const std::vector<std::string_view>& SupportedSlotControls() { return supportedControls; }
 }

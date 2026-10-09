@@ -13,6 +13,9 @@ namespace Settings
 	// Shown after the primary label when a target also has an alternate action, e.g. "Give Potion +"
 	const std::string& AlternateMarker();
 
+	// Show the modifier key's button image after the label instead of the text marker
+	bool ModifierIcon();
+
 	// The game controls ("Ready Weapon", "Jump", ...) for modifier actions 2 and 3 (a_slot 2 or 3)
 	const RE::BSFixedString& SlotControl(std::size_t a_slot);
 

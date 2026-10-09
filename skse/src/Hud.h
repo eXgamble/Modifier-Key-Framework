@@ -9,8 +9,12 @@ namespace Hud
 	// Watch for the HUD menu (kDataLoaded); the stack is drawn into the HUD's own prompt.
 	void Register();
 
-	// The extra lines for the target the prompt is being built for: labels of slots 2 and 3 (in slot
-	// order). Game thread, from the prompt hook; an empty list clears the stack.
-	void SetStack(RE::TESObjectREFR* a_target, std::vector<std::string> a_labels);
-	void ClearStack();
+	// What the prompt being built for a target needs from the HUD: the modifier key's button after the
+	// label (a_marker: the target has modifier actions, key not held), and/or the extra lines (labels of
+	// slots 2 and 3, in slot order, key held). From the prompt hook.
+	void SetPrompt(RE::TESObjectREFR* a_target, bool a_marker, std::vector<std::string> a_labels);
+	void ClearPrompt();
+
+	// The HUD part is in place (else the prompt hook falls back to the text marker)
+	bool Ready();
 }

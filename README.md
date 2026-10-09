@@ -6,8 +6,9 @@ second action. An alternative to perk-based activation and Dynamic Activation Ke
 perk, no script needed just to show a prompt.
 
 - The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
-- When a second action is available, the first label gets a marker (default `+`):
-  `Give Potion +` / `Lydia`. Holding the modifier key switches it to the second action: `Search` / `Lydia`.
+- When a second action is available, the modifier key's button appears after the label, the same
+  image the HUD uses for its own buttons: `[A] Give Potion [LB]` / `Lydia` (keyboard: `[E] Give Potion [Shift]`).
+  Holding the modifier key switches it to the second action: `[A] Search` / `Lydia`.
 - One key for every mod that uses the framework (default Left Shift, Left Shoulder on a gamepad).
 - Up to three actions on the modifier key: while it's held, the prompt shows one line per action,
   stacked like a controller's face buttons (Y on top, then X, then A, then the name). The buttons
@@ -166,7 +167,7 @@ them in order of importance; the framework gives out the buttons by position, th
 
 X and Y are the game controls in the framework's ini (default Ready Weapon and Jump: X and Y on a
 controller, R and Space on a keyboard), so the player's own key bindings apply. Without the modifier
-key the prompt looks as always (`Search +` / `Deer`); while it's held, the actions stack up like a
+key the prompt looks as always (`[A] Search [LB]` / `Deer`); while it's held, the actions stack up like a
 controller's face buttons:
 
 ```
@@ -263,7 +264,7 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 | Setup | perk + entry points + conditions in the Creation Kit, perk distribution | a JSON file |
 | Plugin | your mod's plugin must master DAK | none; no load order slot |
 | Prompt shows the NPC's name | no: the action label replaces the whole prompt (`Search`) | yes: vanilla two lines (`Search` / `Lydia`) |
-| Player sees a second action | no | yes: the `+` marker on the prompt |
+| Player sees a second action | no | yes: the modifier key's button on the prompt |
 | Two mods on the same NPC | perk entry priority, silent | priority, deterministic, logged |
 | Conditions | the Creation Kit's full condition set | the list above; anything else through a keyword, faction or item |
 | Targets | anything a perk entry point can target | NPCs (other objects: planned) |
@@ -271,7 +272,9 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 ## Settings
 
 `SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
-a gamepad button (default Left Shoulder), the alternate-action marker (empty = no marker), and the
+a gamepad button (default Left Shoulder), whether the prompt shows the modifier key's button
+(`bModifierIcon`, default on) or a text marker (`sAlternateMarker`, default `+`, also the fallback for
+a HUD without that button's image), and the
 game controls for the second and third modifier action (`sSlot2Control`, default Ready Weapon;
 `sSlot3Control`, default Jump; also possible: Sneak, Shout, Auto-Move, Toggle Always Run).
 

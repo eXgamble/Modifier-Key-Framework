@@ -5,10 +5,11 @@
 // The vanilla prompt is two HUD fields: RolloverText ("Search\nDeer", HTML, grows down from its top)
 // and RolloverButton_tf (the button image, placed left of the first line). Both are set by the HUD's
 // SetCrosshairTarget, which the game calls. We shadow that function on the HUD instance with a native
-// one: it runs the original, then, when a stack is active, puts the extra labels above the first
-// line, moves the button down to its line, and draws one more button per extra line. The extra
-// buttons are filled by the HUD's own RefreshActivateButtonArt, so they look exactly like the
-// skin's Activate button. No swf is replaced: this works with any HUD that keeps vanilla's names.
+// one: it runs the original, then adds what MKF needs: the modifier key's button right of the first
+// line (the target has modifier actions), or, while the key is held, the extra labels above the first
+// line, the Activate button moved down to its line, and one more button per extra line. Every button
+// is filled by the HUD's own RefreshActivateButtonArt, so it looks exactly like the skin's Activate
+// button. No swf is replaced: this works with any HUD that keeps vanilla's names.
 
 namespace
 {
@@ -16,24 +17,22 @@ namespace
 	constexpr auto ORIGINAL = "mkfOrigSetCrosshairTarget";
 
 
-	struct Stack
+	struct Prompt
 	{
 		RE::ObjectRefHandle      target;
-		std::vector<std::string> labels;  // slot 2, slot 3
+		bool                     marker = false;  // the modifier key's button after the label
+		std::vector<std::string> labels;          // slot 2, slot 3 (modifier key held)
 	};
-	Stack             stack;  // written by the prompt hook, read by the HUD
-	std::mutex        stackLock;
+	Prompt            prompt;  // written by the prompt hook, read by the HUD
+	std::mutex        promptLock;
 	std::atomic<bool> installed{ false };
 
-	// The extra labels, if the stack belongs to what the crosshair is on now
-	std::vector<std::string> ActiveLabels()
+	// The prompt's extras, if they belong to what the crosshair is on now
+	Prompt ActivePrompt()
 	{
-		std::scoped_lock lock{ stackLock };
-		if (stack.labels.empty()) {
-			return {};
-		}
+		std::scoped_lock lock{ promptLock };
 		const auto pick = RE::CrosshairPickData::GetSingleton();
-		return pick && pick->GetActiveTarget() == stack.target ? stack.labels : std::vector<std::string>{};
+		return pick && prompt.target && pick->GetActiveTarget() == prompt.target ? prompt : Prompt{};
 	}
 
 	std::string EscapeHtml(std::string_view a_text)
@@ -60,6 +59,7 @@ namespace
 	struct LineMetrics
 	{
 		double x = 0.0;
+		double width = 0.0;
 		double height = 0.0;
 	};
 
@@ -68,7 +68,7 @@ namespace
 		RE::GFxValue metrics;
 		RE::GFxValue arg(static_cast<double>(a_line));
 		a_text.Invoke("getLineMetrics", &metrics, &arg, 1);
-		return { Number(metrics, "x"), Number(metrics, "height") + Number(metrics, "leading") };
+		return { Number(metrics, "x"), Number(metrics, "width"), Number(metrics, "height") + Number(metrics, "leading") };
 	}
 
 	// The button image the HUD shows for Activate right now ("E", "360_A", "PS3_A"): tells the device
@@ -111,12 +111,42 @@ namespace
 		return art;
 	}
 
-	// One extra button field per slot, made once next to the HUD's own Activate button
-	RE::GFxValue ExtraButton(RE::GFxValue& a_button, std::size_t a_slot)
+	// The image name for the modifier key on the device the HUD shows now, e.g. "Shift" or "360_LB"
+	std::string ModifierArt(const std::string& a_activateArt)
+	{
+		std::string lower = a_activateArt;
+		std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		const bool playstation = lower.starts_with("ps3_");
+		const bool gamepad = playstation || lower.starts_with("360_");
+		const auto devices = RE::BSInputDeviceManager::GetSingleton();
+		RE::BSFixedString name;
+		bool found = false;
+		if (devices && gamepad && Settings::ModifierKeyGamepad() >= 0) {
+			const auto mask = SKSE::InputMap::GamepadKeycodeToMask(static_cast<std::uint32_t>(Settings::ModifierKeyGamepad()));
+			found = devices->GetButtonNameFromID(RE::INPUT_DEVICE::kGamepad, static_cast<std::int32_t>(mask), name);
+		} else if (devices && !gamepad) {
+			found = devices->GetButtonNameFromID(RE::INPUT_DEVICE::kKeyboard, static_cast<std::int32_t>(Settings::ModifierKey()), name);
+		}
+		if (!found || !name.c_str()) {
+			return {};
+		}
+		std::string art = name.c_str();
+		if (playstation && art.starts_with("360_")) {
+			art = "PS3_" + art.substr(4);
+		}
+		static std::set<std::string> logged;
+		if (logged.insert(art).second) {
+			logger::info("HUD: the modifier key shows as {}.png (Activate: {}.png)", art, a_activateArt);
+		}
+		return art;
+	}
+
+	// An extra button field, made once next to the HUD's own Activate button
+	RE::GFxValue Field(RE::GFxValue& a_button, const std::string& a_name)
 	{
 		RE::GFxValue parent;
 		a_button.GetMember("_parent", &parent);
-		const auto name = std::format("mkfButton{}", a_slot + 2);
+		const auto& name = a_name;
 		RE::GFxValue field;
 		parent.GetMember(name.c_str(), &field);
 		if (field.IsUndefined() || field.IsNull()) {
@@ -147,17 +177,30 @@ namespace
 		return field;
 	}
 
-	void HideExtraButtons(RE::GFxValue& a_button)
+	constexpr std::array<const char*, 3> FIELDS{ "mkfButton2", "mkfButton3", "mkfModifier" };
+
+	void HideFields(RE::GFxValue& a_button)
 	{
 		RE::GFxValue parent;
 		a_button.GetMember("_parent", &parent);
-		for (std::size_t slot = 0; slot < 2; ++slot) {
+		for (const auto* name : FIELDS) {
 			RE::GFxValue field;
-			parent.GetMember(std::format("mkfButton{}", slot + 2).c_str(), &field);
+			parent.GetMember(name, &field);
 			if (!field.IsUndefined() && !field.IsNull()) {
 				field.SetMember("_alpha", RE::GFxValue(0.0));
 			}
 		}
+	}
+
+	// Show a field where the HUD shows its own button (same alpha and HUD-mode visibility)
+	void Place(RE::GFxValue& a_field, const RE::GFxValue& a_button, double a_x, double a_y)
+	{
+		a_field.SetMember("_x", RE::GFxValue(a_x));
+		a_field.SetMember("_y", RE::GFxValue(a_y));
+		a_field.SetMember("_alpha", RE::GFxValue(Number(a_button, "_alpha")));
+		RE::GFxValue visible;
+		a_button.GetMember("_visible", &visible);
+		a_field.SetMember("_visible", visible);
 	}
 
 	std::string HtmlOf(const RE::GFxValue& a_field)
@@ -178,7 +221,7 @@ namespace
 	// Fill a field with a button image exactly like the HUD's own Activate button: the HUD's
 	// RefreshActivateButtonArt makes the image tag (the skin's size), and the Activate button's HTML
 	// around it gives the skin's alignment and margins.
-	void ShowArt(RE::GFxValue& a_hud, RE::GFxValue& a_button, RE::GFxValue& a_field, const std::string& a_art)
+	bool ShowArt(RE::GFxValue& a_hud, RE::GFxValue& a_button, RE::GFxValue& a_field, const std::string& a_art, bool a_alignLeft = false)
 	{
 		a_hud.SetMember("RolloverButton_tf", a_field);
 		RE::GFxValue arg(a_art.c_str());
@@ -188,10 +231,38 @@ namespace
 		const auto ours = ImageTag(HtmlOf(a_field));
 		auto html = HtmlOf(a_button);
 		const auto theirs = ImageTag(html);
-		if (!ours.empty() && !theirs.empty()) {
-			html.replace(html.find(theirs), theirs.size(), ours);
-			a_field.SetMember("htmlText", RE::GFxValue(html.c_str()));
+		if (ours.empty() || theirs.empty()) {
+			return false;  // no image of that name in this HUD
 		}
+		html.replace(html.find(theirs), theirs.size(), ours);
+		if (a_alignLeft) {  // right of the text: hug it from the other side
+			if (const auto p = html.find("<P ALIGN=\""); p != std::string::npos) {
+				const auto start = p + 10;
+				html.replace(start, html.find('"', start) - start, "LEFT");
+			}
+		}
+		a_field.SetMember("htmlText", RE::GFxValue(html.c_str()));
+		return true;
+	}
+
+	// The modifier key's button right of the label's line, as far from the text as the Activate
+	// button is on the left; without an image for that key, the ini's text marker instead
+	void ShowModifier(RE::GFxValue& a_hud, RE::GFxValue& a_text, RE::GFxValue& a_button, const RE::GFxValue& a_name)
+	{
+		auto field = Field(a_button, "mkfModifier");
+		if (!ShowArt(a_hud, a_button, field, ModifierArt(ActivateArt(a_button)), true)) {
+			if (!Settings::AlternateMarker().empty()) {
+				std::string html = a_name.GetString();
+				html.insert(std::min(html.find('\n'), html.size()), " " + EscapeHtml(Settings::AlternateMarker()));
+				std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
+				a_text.Invoke("SetText", nullptr, setArgs.data(), setArgs.size());
+			}
+			return;
+		}
+		const auto line = GetLine(a_text, 0);
+		const double textX = Number(a_text, "_x") + line.x;
+		const double gap = textX - (Number(a_button, "_x") + Number(a_button, "_width"));
+		Place(field, a_button, textX + line.width + gap, Number(a_button, "_y"));
 	}
 
 	void Apply(RE::GFxValue& a_hud, bool a_activate, const RE::GFxValue& a_name)
@@ -212,13 +283,17 @@ namespace
 		}
 		const double baseY = [&] { RE::GFxValue y; a_hud.GetMember("mkfButtonBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(button, "_y"); }();
 
-		const auto labels = a_activate && a_name.IsString() ? ActiveLabels() : std::vector<std::string>{};
+		const auto active = a_activate && a_name.IsString() ? ActivePrompt() : Prompt{};
+		const auto& labels = active.labels;
+		HideFields(button);
 		if (labels.empty()) {
 			if (wasMoved) {
 				button.SetMember("_y", RE::GFxValue(baseY));
 				a_hud.SetMember("mkfButtonMoved", RE::GFxValue(false));
 			}
-			HideExtraButtons(button);
+			if (active.marker) {
+				ShowModifier(a_hud, text, button, a_name);
+			}
 			return;
 		}
 
@@ -246,14 +321,9 @@ namespace
 				button.SetMember("_y", RE::GFxValue(baseY + top));
 			} else {
 				const std::size_t slot = extra - 1 - line;  // top line = highest slot
-				auto field = ExtraButton(button, slot);
+				auto field = Field(button, FIELDS[slot]);
 				ShowArt(a_hud, button, field, ArtFor(Settings::SlotControl(slot + 2), activateArt));
-				field.SetMember("_x", RE::GFxValue(x));
-				field.SetMember("_y", RE::GFxValue(baseY + top));
-				field.SetMember("_alpha", RE::GFxValue(Number(button, "_alpha")));
-				RE::GFxValue visible;
-				button.GetMember("_visible", &visible);
-				field.SetMember("_visible", visible);
+				Place(field, button, x, baseY + top);
 			}
 			top += metrics.height;
 		}
@@ -334,24 +404,29 @@ namespace Hud
 		}
 	}
 
-	void SetStack(RE::TESObjectREFR* a_target, std::vector<std::string> a_labels)
+	void SetPrompt(RE::TESObjectREFR* a_target, bool a_marker, std::vector<std::string> a_labels)
 	{
-		if (a_labels.empty() || !a_target) {
-			ClearStack();
-			return;
-		}
 		if (!installed) {
 			SKSE::GetTaskInterface()->AddUITask(Install);  // in case the HUD opened before we were watching
 		}
-		std::scoped_lock lock{ stackLock };
-		stack.target = a_target->GetHandle();
-		stack.labels = std::move(a_labels);
+		std::scoped_lock lock{ promptLock };
+		if (!a_target || (!a_marker && a_labels.empty())) {
+			prompt = {};
+			return;
+		}
+		prompt.target = a_target->GetHandle();
+		prompt.marker = a_marker && a_labels.empty();
+		prompt.labels = std::move(a_labels);
 	}
 
-	void ClearStack()
+	void ClearPrompt()
 	{
-		std::scoped_lock lock{ stackLock };
-		stack.labels.clear();
-		stack.target.reset();
+		std::scoped_lock lock{ promptLock };
+		prompt = {};
+	}
+
+	bool Ready()
+	{
+		return installed;
 	}
 }
