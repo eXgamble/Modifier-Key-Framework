@@ -53,10 +53,33 @@ namespace
 		return out;
 	}
 
+	// GFxValue's GetMember/SetMember/Invoke only assert that the value is an object, and release builds
+	// drop asserts: on an undefined value (a HUD without one of vanilla's fields, a field not made yet)
+	// they read a null pointer and crash the game. Every access goes through these instead.
+	bool GetIn(const RE::GFxValue& a_object, const char* a_member, RE::GFxValue* a_value)
+	{
+		return a_object.IsObject() && a_object.GetMember(a_member, a_value);
+	}
+
+	bool SetIn(RE::GFxValue& a_object, const char* a_member, const RE::GFxValue& a_value)
+	{
+		return a_object.IsObject() && a_object.SetMember(a_member, a_value);
+	}
+
+	bool CallIn(RE::GFxValue& a_object, const char* a_function, RE::GFxValue* a_result, const RE::GFxValue* a_args, RE::UPInt a_count)
+	{
+		return a_object.IsObject() && a_object.Invoke(a_function, a_result, a_args, a_count);
+	}
+
+	bool CallIn(RE::GFxValue& a_object, const char* a_function, RE::GFxValue* a_result = nullptr)
+	{
+		return CallIn(a_object, a_function, a_result, nullptr, 0);
+	}
+
 	double Number(const RE::GFxValue& a_object, const char* a_member)
 	{
 		RE::GFxValue value;
-		a_object.GetMember(a_member, &value);
+		GetIn(a_object, a_member, &value);
 		return value.IsNumber() ? value.GetNumber() : 0.0;
 	}
 
@@ -71,7 +94,7 @@ namespace
 	{
 		RE::GFxValue metrics;
 		RE::GFxValue arg(static_cast<double>(a_line));
-		a_text.Invoke("getLineMetrics", &metrics, &arg, 1);
+		CallIn(a_text, "getLineMetrics", &metrics, &arg, 1);
 		return { Number(metrics, "x"), Number(metrics, "width"), Number(metrics, "height") + Number(metrics, "leading") };
 	}
 
@@ -79,7 +102,7 @@ namespace
 	std::string ActivateArt(const RE::GFxValue& a_button)
 	{
 		RE::GFxValue html;
-		a_button.GetMember("htmlText", &html);
+		GetIn(a_button, "htmlText", &html);
 		const std::string text = html.IsString() ? html.GetString() : "";
 		std::string lower = text;
 		std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -151,15 +174,18 @@ namespace
 	// flags and join the list.
 	void FollowHudModes(RE::GFxValue& a_field, const RE::GFxValue& a_button)
 	{
+		if (!a_button.IsObject() || !a_field.IsObject()) {
+			return;
+		}
 		a_button.VisitMembers([&](const char* a_member, const RE::GFxValue& a_value) {
 			if (a_member && a_member[0] != '_' && a_value.IsBool() && a_value.GetBool()) {
-				a_field.SetMember(a_member, a_value);
+				SetIn(a_field, a_member, a_value);
 			}
 		});
 		for (const auto* mode : { "All", "Favor", "StealthMode", "Swimming" }) {  // the vanilla and Oathvein set
 			RE::GFxValue flag;
-			if (a_button.GetMember(mode, &flag) && flag.IsBool() && flag.GetBool()) {
-				a_field.SetMember(mode, flag);
+			if (GetIn(a_button, mode, &flag) && flag.IsBool() && flag.GetBool()) {
+				SetIn(a_field, mode, flag);
 			}
 		}
 		const auto ui = RE::UI::GetSingleton();
@@ -174,34 +200,34 @@ namespace
 	RE::GFxValue Field(RE::GFxValue& a_button, const std::string& a_name)
 	{
 		RE::GFxValue parent;
-		a_button.GetMember("_parent", &parent);
+		GetIn(a_button, "_parent", &parent);
 		const auto& name = a_name;
 		RE::GFxValue field;
-		parent.GetMember(name.c_str(), &field);
+		GetIn(parent, name.c_str(), &field);
 		if (field.IsUndefined() || field.IsNull()) {
 			RE::GFxValue depth;
-			parent.Invoke("getNextHighestDepth", &depth);
+			CallIn(parent, "getNextHighestDepth", &depth);
 			std::array<RE::GFxValue, 6> args{
 				RE::GFxValue(name.c_str()), depth,
 				RE::GFxValue(Number(a_button, "_x")), RE::GFxValue(Number(a_button, "_y")),
 				RE::GFxValue(Number(a_button, "_width")), RE::GFxValue(Number(a_button, "_height"))
 			};
-			parent.Invoke("createTextField", nullptr, args.data(), args.size());
-			parent.GetMember(name.c_str(), &field);
-			field.SetMember("html", RE::GFxValue(true));
-			field.SetMember("selectable", RE::GFxValue(false));
+			CallIn(parent, "createTextField", nullptr, args.data(), args.size());
+			GetIn(parent, name.c_str(), &field);
+			SetIn(field, "html", RE::GFxValue(true));
+			SetIn(field, "selectable", RE::GFxValue(false));
 			// the skin's own button field settings: alignment (the image hugs the text), wrapping
 			for (const auto* member : { "multiline", "wordWrap", "embedFonts" }) {
 				RE::GFxValue value;
-				a_button.GetMember(member, &value);
-				field.SetMember(member, value);
+				GetIn(a_button, member, &value);
+				SetIn(field, member, value);
 			}
 			RE::GFxValue format;
-			a_button.Invoke("getTextFormat", &format);
-			field.Invoke("setNewTextFormat", nullptr, &format, 1);
+			CallIn(a_button, "getTextFormat", &format);
+			CallIn(field, "setNewTextFormat", nullptr, &format, 1);
 			RE::GFxValue align;
-			a_button.GetMember("autoSize", &align);
-			field.SetMember("autoSize", align);
+			GetIn(a_button, "autoSize", &align);
+			SetIn(field, "autoSize", align);
 			FollowHudModes(field, a_button);
 		}
 		return field;
@@ -212,12 +238,12 @@ namespace
 	void HideFields(RE::GFxValue& a_button)
 	{
 		RE::GFxValue parent;
-		a_button.GetMember("_parent", &parent);
+		GetIn(a_button, "_parent", &parent);
 		for (const auto* name : FIELDS) {
 			RE::GFxValue field;
-			parent.GetMember(name, &field);
+			GetIn(parent, name, &field);
 			if (!field.IsUndefined() && !field.IsNull()) {
-				field.SetMember("_alpha", RE::GFxValue(0.0));
+				SetIn(field, "_alpha", RE::GFxValue(0.0));
 			}
 		}
 	}
@@ -225,18 +251,18 @@ namespace
 	// Show a field where the HUD shows its own button (same alpha and HUD-mode visibility)
 	void Place(RE::GFxValue& a_field, const RE::GFxValue& a_button, double a_x, double a_y)
 	{
-		a_field.SetMember("_x", RE::GFxValue(a_x));
-		a_field.SetMember("_y", RE::GFxValue(a_y));
-		a_field.SetMember("_alpha", RE::GFxValue(Number(a_button, "_alpha")));
+		SetIn(a_field, "_x", RE::GFxValue(a_x));
+		SetIn(a_field, "_y", RE::GFxValue(a_y));
+		SetIn(a_field, "_alpha", RE::GFxValue(Number(a_button, "_alpha")));
 		RE::GFxValue visible;
-		a_button.GetMember("_visible", &visible);
-		a_field.SetMember("_visible", visible);
+		GetIn(a_button, "_visible", &visible);
+		SetIn(a_field, "_visible", visible);
 	}
 
 	std::string HtmlOf(const RE::GFxValue& a_field)
 	{
 		RE::GFxValue html;
-		a_field.GetMember("htmlText", &html);
+		GetIn(a_field, "htmlText", &html);
 		return html.IsString() ? html.GetString() : "";
 	}
 
@@ -253,12 +279,12 @@ namespace
 	// around it gives the skin's alignment and margins.
 	bool ShowArt(RE::GFxValue& a_hud, RE::GFxValue& a_button, RE::GFxValue& a_field, const std::string& a_art, bool a_alignLeft = false)
 	{
-		a_hud.SetMember("RolloverButton_tf", a_field);
+		SetIn(a_hud, "RolloverButton_tf", a_field);
 		RE::GFxValue arg(a_art.c_str());
 		RE::GFxValue original;
-		a_hud.GetMember(ORIGINAL_ART, &original);
-		a_hud.Invoke(original.IsUndefined() ? "RefreshActivateButtonArt" : ORIGINAL_ART, nullptr, &arg, 1);
-		a_hud.SetMember("RolloverButton_tf", a_button);
+		GetIn(a_hud, ORIGINAL_ART, &original);
+		CallIn(a_hud, original.IsUndefined() ? "RefreshActivateButtonArt" : ORIGINAL_ART, nullptr, &arg, 1);
+		SetIn(a_hud, "RolloverButton_tf", a_button);
 
 		const auto ours = ImageTag(HtmlOf(a_field));
 		auto html = HtmlOf(a_button);
@@ -273,7 +299,7 @@ namespace
 				html.replace(start, html.find('"', start) - start, "LEFT");
 			}
 		}
-		a_field.SetMember("htmlText", RE::GFxValue(html.c_str()));
+		SetIn(a_field, "htmlText", RE::GFxValue(html.c_str()));
 		return true;
 	}
 
@@ -289,22 +315,22 @@ namespace
 	RE::GFxValue Separator(RE::GFxValue& a_button, RE::GFxValue& a_text)
 	{
 		RE::GFxValue parent;
-		a_button.GetMember("_parent", &parent);
+		GetIn(a_button, "_parent", &parent);
 		RE::GFxValue field;
-		parent.GetMember("mkfSeparator", &field);
+		GetIn(parent, "mkfSeparator", &field);
 		if (field.IsUndefined() || field.IsNull()) {
 			RE::GFxValue depth;
-			parent.Invoke("getNextHighestDepth", &depth);
+			CallIn(parent, "getNextHighestDepth", &depth);
 			std::array<RE::GFxValue, 6> args{
 				RE::GFxValue("mkfSeparator"), depth, RE::GFxValue(0.0), RE::GFxValue(0.0),
 				RE::GFxValue(40.0), RE::GFxValue(Number(a_text, "_height"))
 			};
-			parent.Invoke("createTextField", nullptr, args.data(), args.size());
-			parent.GetMember("mkfSeparator", &field);
-			field.SetMember("selectable", RE::GFxValue(false));
-			field.SetMember("embedFonts", RE::GFxValue(true));
-			field.SetMember("html", RE::GFxValue(true));
-			field.SetMember("autoSize", RE::GFxValue("left"));
+			CallIn(parent, "createTextField", nullptr, args.data(), args.size());
+			GetIn(parent, "mkfSeparator", &field);
+			SetIn(field, "selectable", RE::GFxValue(false));
+			SetIn(field, "embedFonts", RE::GFxValue(true));
+			SetIn(field, "html", RE::GFxValue(true));
+			SetIn(field, "autoSize", RE::GFxValue("left"));
 			FollowHudModes(field, a_button);
 		}
 		// the prompt's own font (face, size, colour): the first FONT tag of its HTML
@@ -313,7 +339,7 @@ namespace
 		const auto end = start == std::string::npos ? std::string::npos : html.find('>', start);
 		const auto separator = EscapeHtml(Settings::ModifierSeparator());
 		const auto text = end == std::string::npos ? separator : html.substr(start, end - start + 1) + separator + "</FONT>";
-		field.SetMember("htmlText", RE::GFxValue(text.c_str()));
+		SetIn(field, "htmlText", RE::GFxValue(text.c_str()));
 		return field;
 	}
 
@@ -327,7 +353,7 @@ namespace
 				std::string html = a_name.GetString();
 				html.insert(std::min(html.find('\n'), html.size()), " " + EscapeHtml(Settings::AlternateMarker()));
 				std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
-				a_text.Invoke("SetText", nullptr, setArgs.data(), setArgs.size());
+				CallIn(a_text, "SetText", nullptr, setArgs.data(), setArgs.size());
 			}
 			return;
 		}
@@ -348,28 +374,28 @@ namespace
 	void Apply(RE::GFxValue& a_hud, bool a_activate, const RE::GFxValue& a_name)
 	{
 		RE::GFxValue text, button;
-		a_hud.GetMember("RolloverText", &text);
-		a_hud.GetMember("RolloverButton_tf", &button);
+		GetIn(a_hud, "RolloverText", &text);
+		GetIn(a_hud, "RolloverButton_tf", &button);
 		if (!text.IsDisplayObject() && !text.IsObject()) {
 			return;
 		}
 
 		// Where the HUD keeps its button; we move it while a stack shows and put it back after
 		RE::GFxValue moved;
-		a_hud.GetMember("mkfButtonMoved", &moved);
+		GetIn(a_hud, "mkfButtonMoved", &moved);
 		const bool wasMoved = moved.IsBool() && moved.GetBool();
 		if (!wasMoved) {
-			a_hud.SetMember("mkfButtonBaseY", RE::GFxValue(Number(button, "_y")));
+			SetIn(a_hud, "mkfButtonBaseY", RE::GFxValue(Number(button, "_y")));
 		}
-		const double baseY = [&] { RE::GFxValue y; a_hud.GetMember("mkfButtonBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(button, "_y"); }();
+		const double baseY = [&] { RE::GFxValue y; GetIn(a_hud, "mkfButtonBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(button, "_y"); }();
 
 		const auto active = a_activate && a_name.IsString() ? ActivePrompt() : Prompt{};
 		const auto& labels = active.labels;
 		HideFields(button);
 		if (labels.empty()) {
 			if (wasMoved) {
-				button.SetMember("_y", RE::GFxValue(baseY));
-				a_hud.SetMember("mkfButtonMoved", RE::GFxValue(false));
+				SetIn(button, "_y", RE::GFxValue(baseY));
+				SetIn(a_hud, "mkfButtonMoved", RE::GFxValue(false));
 			}
 			if (active.marker) {
 				ShowModifier(a_hud, text, button, a_name);
@@ -388,7 +414,7 @@ namespace
 		}
 		html += a_name.GetString();
 		std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
-		text.Invoke("SetText", nullptr, setArgs.data(), setArgs.size());
+		CallIn(text, "SetText", nullptr, setArgs.data(), setArgs.size());
 
 		const auto extra = static_cast<std::uint32_t>(labels.size());
 		const std::string activateArt = ActivateArt(button);
@@ -397,8 +423,8 @@ namespace
 			const auto metrics = GetLine(text, line);
 			const double x = buttonX + (metrics.x - firstLineX);
 			if (line == extra) {
-				button.SetMember("_x", RE::GFxValue(x));
-				button.SetMember("_y", RE::GFxValue(baseY + top));
+				SetIn(button, "_x", RE::GFxValue(x));
+				SetIn(button, "_y", RE::GFxValue(baseY + top));
 			} else {
 				const std::size_t slot = extra - 1 - line;  // top line = highest slot
 				auto field = Field(button, FIELDS[slot]);
@@ -407,7 +433,7 @@ namespace
 			}
 			top += metrics.height;
 		}
-		a_hud.SetMember("mkfButtonMoved", RE::GFxValue(true));
+		SetIn(a_hud, "mkfButtonMoved", RE::GFxValue(true));
 	}
 
 	class SetCrosshairTarget : public RE::GFxFunctionHandler
@@ -420,7 +446,7 @@ namespace
 			}
 			RE::GFxValue hud = *a_params.thisPtr;
 			lastArgs.assign(a_params.args, a_params.args + a_params.argCount);
-			hud.Invoke(ORIGINAL, a_params.retVal, a_params.args, a_params.argCount);
+			CallIn(hud, ORIGINAL, a_params.retVal, a_params.args, a_params.argCount);
 			const bool activate = a_params.argCount > 0 && a_params.args[0].IsBool() && a_params.args[0].GetBool();
 			const RE::GFxValue name = a_params.argCount > 1 ? a_params.args[1] : RE::GFxValue{};
 			Apply(hud, activate, name);
@@ -438,10 +464,10 @@ namespace
 				return;
 			}
 			RE::GFxValue hud = *a_params.thisPtr;
-			hud.Invoke(ORIGINAL_ART, a_params.retVal, a_params.args, a_params.argCount);
+			CallIn(hud, ORIGINAL_ART, a_params.retVal, a_params.args, a_params.argCount);
 			if (!lastArgs.empty()) {
 				const auto args = lastArgs;
-				hud.Invoke("SetCrosshairTarget", nullptr, args.data(), args.size());
+				CallIn(hud, "SetCrosshairTarget", nullptr, args.data(), args.size());
 			}
 		}
 	};
@@ -456,13 +482,13 @@ namespace
 			return;
 		}
 		RE::GFxValue existing;
-		hud.GetMember(ORIGINAL, &existing);
+		GetIn(hud, ORIGINAL, &existing);
 		if (!existing.IsUndefined()) {
 			installed = true;
 			return;
 		}
 		RE::GFxValue original;
-		hud.GetMember("SetCrosshairTarget", &original);
+		GetIn(hud, "SetCrosshairTarget", &original);
 		if (original.IsUndefined()) {
 			logger::warn("HUD: no SetCrosshairTarget on {}, the action stack can't be shown", HUD_PATH);
 			return;
@@ -470,17 +496,17 @@ namespace
 		static auto* handler = new SetCrosshairTarget();  // lives for the session
 		RE::GFxValue wrapper;
 		movie->CreateFunction(&wrapper, handler);
-		hud.SetMember(ORIGINAL, original);
-		hud.SetMember("SetCrosshairTarget", wrapper);
+		SetIn(hud, ORIGINAL, original);
+		SetIn(hud, "SetCrosshairTarget", wrapper);
 
 		RE::GFxValue originalArt;
-		hud.GetMember("RefreshActivateButtonArt", &originalArt);
+		GetIn(hud, "RefreshActivateButtonArt", &originalArt);
 		if (!originalArt.IsUndefined()) {
 			static auto* artHandler = new RefreshActivateButtonArt();
 			RE::GFxValue artWrapper;
 			movie->CreateFunction(&artWrapper, artHandler);
-			hud.SetMember(ORIGINAL_ART, originalArt);
-			hud.SetMember("RefreshActivateButtonArt", artWrapper);
+			SetIn(hud, ORIGINAL_ART, originalArt);
+			SetIn(hud, "RefreshActivateButtonArt", artWrapper);
 		}
 		installed = true;
 		logger::info("HUD: action stack installed");
