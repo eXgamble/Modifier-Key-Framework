@@ -9,9 +9,9 @@
   "properties": {
     "$schema": { "type": "string" },
     "version": {
-      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional.",
+      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional. Version 3 (framework 1.2.0): alternate can be a list of up to 3 actions.",
       "type": "integer",
-      "enum": [1, 2]
+      "enum": [1, 2, 3]
     },
     "translations": {
       "description": "Name of the translation file for $Key labels: Interface/Translations/<name>_<LANGUAGE>.txt. Default: this file's name without .json.",
@@ -53,8 +53,11 @@
           "$ref": "#/definitions/action"
         },
         "alternate": {
-          "description": "The action while the modifier key is held. Adds the marker (default '+') to the primary label. Needs a label.",
-          "allOf": [{ "$ref": "#/definitions/action" }, { "required": ["label"] }]
+          "description": "The action while the modifier key is held (Activate), or (version 3) a list of up to 3 in order of importance: buttons Activate, X, Y. Adds the marker (default '+') to the primary label. Each needs a label.",
+          "oneOf": [
+            { "$ref": "#/definitions/modifierAction" },
+            { "type": "array", "minItems": 1, "maxItems": 3, "items": { "$ref": "#/definitions/modifierAction" } }
+          ]
         },
         "priority": {
           "description": "When several rules match, the highest wins; ties go to the file name that sorts first.",
@@ -67,6 +70,9 @@
           "default": true
         }
       }
+    },
+    "modifierAction": {
+      "allOf": [{ "$ref": "#/definitions/action" }, { "required": ["label"] }]
     },
     "action": {
       "type": "object",

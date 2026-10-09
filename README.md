@@ -9,6 +9,9 @@ perk, no script needed just to show a prompt.
 - When a second action is available, the first label gets a marker (default `+`):
   `Give Potion +` / `Lydia`. Holding the modifier key switches it to the second action: `Search` / `Lydia`.
 - One key for every mod that uses the framework (default Left Shift, Left Shoulder on a gamepad).
+- Up to three actions on the modifier key: while it's held, the prompt shows one line per action,
+  stacked like a controller's face buttons (Y on top, then X, then A, then the name). The buttons
+  belong to positions, not to mods, so every mod looks and plays the same.
 
 **Requirements:** [SKSE64](https://skse.silverlock.org/),
 [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444).
@@ -53,7 +56,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default, or `2`: optional `primary`, framework 1.1.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -66,7 +69,7 @@ Each rule:
 | `requires` | optional: conditions that must **all** hold (see [Conditions](#conditions)) |
 | `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
 | `primary` | `{ "label": ..., "event": ... }`: the label shown, and the SKSE mod event sent on activation. Without an `event`, only the label changes and activation stays vanilla. Without a `label`, the prompt keeps the game's own text (`Search` on a dead body, `Talk`, in the player's language). Format `2`: `primary` itself is optional, `"primary": {}` or leaving it out keeps the activation fully vanilla |
-| `alternate` | optional second action, used while the modifier key is held; needs a `label` |
+| `alternate` | optional action used while the modifier key is held; needs a `label`. Format `3`: a list of up to 3 actions, in order of importance (see [More than one modifier action](#more-than-one-modifier-action)) |
 | `priority` | when several rules match, the highest wins (default 0) |
 | `enabled` | optional, default `true`; `false` = off until a script turns it on (see [Papyrus API](#papyrus-api)) |
 
@@ -127,12 +130,16 @@ alias's `OnPlayerLoadGame`):
 ```papyrus
 RegisterForModEvent("MyMod_Action", "OnMyModAction")
 
-Event OnMyModAction(String asEventName, String asRuleId, Float afIsAlternate, Form akTarget)
+Event OnMyModAction(String asEventName, String asRuleId, Float afAction, Form akTarget)
 	Actor target = akTarget As Actor
-	If afIsAlternate
-		; the alternate action (modifier key held)
-	Else
+	If afAction == 0.0
 		; the primary action
+	ElseIf afAction == 1.0
+		; the (first) modifier action: Activate with the modifier key held
+	ElseIf afAction == 2.0
+		; the second modifier action (X)
+	Else
+		; the third modifier action (Y)
 	EndIf
 EndEvent
 ```
@@ -141,10 +148,53 @@ EndEvent
 |---|---|
 | `asEventName` | the action's `event` |
 | `asRuleId` | the rule's `id`, so one handler can serve several rules |
-| `afIsAlternate` | `1.0` for the alternate action, `0.0` for the primary |
+| `afAction` | which action: `0.0` the primary, `1.0` to `3.0` the modifier actions in order (`1.0` is the single alternate, as before 1.2.0, so `If afIsAlternate` scripts keep working) |
 | `akTarget` | the NPC |
 
-`primary` and `alternate` may use the same `event`, or different ones.
+All actions may use the same `event`, or different ones.
+
+### More than one modifier action
+
+`"alternate"` can be a list of up to three actions (rule file `"version": 3`). Your mod only lists
+them in order of importance; the framework gives out the buttons by position, the same for every mod:
+
+| Actions | Buttons while the modifier key is held |
+|---|---|
+| 1 | Activate (A / E) |
+| 2 | Activate, X |
+| 3 | Activate, X, Y |
+
+X and Y are the game controls in the framework's ini (default Ready Weapon and Jump: X and Y on a
+controller, R and Space on a keyboard), so the player's own key bindings apply. Without the modifier
+key the prompt looks as always (`Search +` / `Deer`); while it's held, the actions stack up like a
+controller's face buttons:
+
+```
+ [Y]  Skin Animal
+ [X]  Harvest Meat
+ [A]  Pick Up Carcass
+      Deer
+```
+
+```jsonc
+{
+  "version": 3,
+  "rules": [{
+    "id": "carcass",
+    "requires": { "alive": false, "keyword": "Skyrim.esm|0x13798" },  // dead animals
+    "primary": {},                                                    // Search, as vanilla
+    "alternate": [
+      { "label": "Pick Up Carcass", "event": "MyMod_Action" },        // Activate
+      { "label": "Harvest Meat",    "event": "MyMod_Action" },        // X
+      { "label": "Skin Animal",     "event": "MyMod_Action" }         // Y
+    ]
+  }]
+}
+```
+
+The X and Y controls do their normal job (drawing the weapon, jumping) everywhere else: the framework
+only takes them while the modifier key is held over a target whose rule has that many actions. One
+rule wins per target and brings all its actions; actions from different mods are never mixed.
 
 ### Translated labels
 
@@ -221,7 +271,9 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 ## Settings
 
 `SKSE/Plugins/ModifierKeyFramework.ini`: the modifier key (DirectX scan code, default Left Shift),
-a gamepad button (default Left Shoulder), and the alternate-action marker (empty = no marker).
+a gamepad button (default Left Shoulder), the alternate-action marker (empty = no marker), and the
+game controls for the second and third modifier action (`sSlot2Control`, default Ready Weapon;
+`sSlot3Control`, default Jump; also possible: Sneak, Shout, Auto-Move, Toggle Always Run).
 
 ## Building
 

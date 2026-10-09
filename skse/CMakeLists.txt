@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(ModifierKeyFramework VERSION 1.1.0 LANGUAGES CXX)
+project(ModifierKeyFramework VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ endif()
 add_commonlibsse_plugin(${PROJECT_NAME}
 	NAME "ModifierKeyFramework"
 	AUTHOR "eXgamble"
-	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp src/Papyrus.cpp)
+	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp src/Papyrus.cpp src/Hud.cpp)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_path(SIMPLEINI_INCLUDE_DIRS "SimpleIni.h")

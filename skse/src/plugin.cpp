@@ -3,6 +3,7 @@
 // (SKSE mod events), handles the shared modifier key, and offers a small Papyrus API.
 
 #include "Hooks.h"
+#include "Hud.h"
 #include "Input.h"
 #include "Papyrus.h"
 #include "Rules.h"
@@ -33,6 +34,7 @@ namespace
 			Settings::Load();
 			Rules::Load();
 			Input::Register();
+			Hud::Register();
 		}
 	}
 }

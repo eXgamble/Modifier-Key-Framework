@@ -17,6 +17,9 @@
 // Labels can be "$Key"s, looked up in Interface/Translations/<name>_<LANGUAGE>.txt, where <name> is
 // the rule file's name, or the file's top-level "translations" value.
 //
+// "alternate" can also be a list of up to 3 actions (rule format 3): while the modifier key is held
+// they get the buttons Activate, slot 2 and slot 3 (ini; X and Y on a controller), in that order.
+//
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
 // match, the highest priority wins.
@@ -82,7 +85,7 @@ namespace Rules
 		Conditions            exclusions;
 		std::int32_t          priority = 0;
 		Action                primary;
-		std::optional<Action> alternate;
+		std::vector<Action>   alternates;  // modifier actions in button order: Activate, slot 2, slot 3 (0-3 of them)
 		EnabledFlag           enabled;  // "enabled" in JSON (default true), then Papyrus
 	};
 

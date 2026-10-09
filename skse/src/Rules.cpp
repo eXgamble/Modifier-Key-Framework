@@ -11,7 +11,9 @@ namespace
 	// Rule files may say which format they're written for ("version"); newer ones are refused
 	// instead of half-understood. Files without it are version 1.
 	// 2 (1.1.0): "primary" and its "label" are optional (no label = the game's own prompt text).
-	constexpr std::int32_t RULE_FORMAT_VERSION = 2;
+	// 3 (1.2.0): "alternate" can be a list of up to 3 actions (buttons: Activate, then slots 2 and 3).
+	constexpr std::int32_t RULE_FORMAT_VERSION = 3;
+	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
@@ -236,6 +238,7 @@ namespace
 			return;
 		}
 
+		const std::int32_t fileVersion = root.value("version", 1);
 		LoadTranslations(root.value("translations", a_path.stem().string()));
 
 		std::size_t loaded = 0;
@@ -261,9 +264,22 @@ namespace
 				}
 				rule.primary = ReadAction(entry.value("primary", json::object()), "primary", false);
 				if (entry.contains("alternate")) {
-					rule.alternate = ReadAction(entry["alternate"], "alternate", true);
+					const auto& alternate = entry["alternate"];
+					if (alternate.is_array()) {
+						if (fileVersion < 3) {
+							throw RuleError{ "a list of alternates needs \"version\": 3" };
+						}
+						if (alternate.empty() || alternate.size() > MAX_ALTERNATES) {
+							throw RuleError{ std::format("\"alternate\" lists 1 to {} actions", MAX_ALTERNATES) };
+						}
+						for (std::size_t i = 0; i < alternate.size(); ++i) {
+							rule.alternates.push_back(ReadAction(alternate[i], std::format("alternate {}", i + 1), true));
+						}
+					} else {
+						rule.alternates.push_back(ReadAction(alternate, "alternate", true));
+					}
 				}
-				if (rule.primary.label.empty() && rule.primary.event.empty() && !rule.alternate) {
+				if (rule.primary.label.empty() && rule.primary.event.empty() && rule.alternates.empty()) {
 					throw RuleError{ "the rule changes nothing: give it a primary label or event, or an alternate" };
 				}
 				if (entry.contains("requires")) {
