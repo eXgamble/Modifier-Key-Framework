@@ -1,7 +1,7 @@
 # Modifier Key Framework
 
 An SKSE framework for Skyrim Anniversary Edition (1.6.x and 1.7.x) that lets mods add their own
-activation actions to NPCs, declared in simple JSON files, with one shared **modifier key** for a
+activation actions to NPCs and creatures, living or dead (bodies too), declared in simple JSON files, with one shared **modifier key** for a
 second action. An alternative to perk-based activation and Dynamic Activation Key: no plugin, no
 perk, no script needed just to show a prompt.
 
