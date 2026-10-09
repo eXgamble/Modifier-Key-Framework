@@ -15,6 +15,10 @@ namespace
 {
 	constexpr auto HUD_PATH = "_root.HUDMovieBaseInstance";
 	constexpr auto ORIGINAL = "mkfOrigSetCrosshairTarget";
+	constexpr auto ORIGINAL_ART = "mkfOrigRefreshActivateButtonArt";
+
+	// The last SetCrosshairTarget call, replayed when the HUD switches button art (keyboard <-> gamepad)
+	std::vector<RE::GFxValue> lastArgs;  // UI thread only
 
 
 	struct Prompt
@@ -225,7 +229,9 @@ namespace
 	{
 		a_hud.SetMember("RolloverButton_tf", a_field);
 		RE::GFxValue arg(a_art.c_str());
-		a_hud.Invoke("RefreshActivateButtonArt", nullptr, &arg, 1);
+		RE::GFxValue original;
+		a_hud.GetMember(ORIGINAL_ART, &original);
+		a_hud.Invoke(original.IsUndefined() ? "RefreshActivateButtonArt" : ORIGINAL_ART, nullptr, &arg, 1);
 		a_hud.SetMember("RolloverButton_tf", a_button);
 
 		const auto ours = ImageTag(HtmlOf(a_field));
@@ -386,10 +392,30 @@ namespace
 				return;
 			}
 			RE::GFxValue hud = *a_params.thisPtr;
+			lastArgs.assign(a_params.args, a_params.args + a_params.argCount);
 			hud.Invoke(ORIGINAL, a_params.retVal, a_params.args, a_params.argCount);
 			const bool activate = a_params.argCount > 0 && a_params.args[0].IsBool() && a_params.args[0].GetBool();
 			const RE::GFxValue name = a_params.argCount > 1 ? a_params.args[1] : RE::GFxValue{};
 			Apply(hud, activate, name);
+		}
+	};
+
+	// The game redraws only its own Activate button when the player switches between keyboard and
+	// gamepad: redraw the prompt with it, so MKF's buttons switch too
+	class RefreshActivateButtonArt : public RE::GFxFunctionHandler
+	{
+	public:
+		void Call(Params& a_params) override
+		{
+			if (!a_params.thisPtr) {
+				return;
+			}
+			RE::GFxValue hud = *a_params.thisPtr;
+			hud.Invoke(ORIGINAL_ART, a_params.retVal, a_params.args, a_params.argCount);
+			if (!lastArgs.empty()) {
+				const auto args = lastArgs;
+				hud.Invoke("SetCrosshairTarget", nullptr, args.data(), args.size());
+			}
 		}
 	};
 
@@ -419,6 +445,16 @@ namespace
 		movie->CreateFunction(&wrapper, handler);
 		hud.SetMember(ORIGINAL, original);
 		hud.SetMember("SetCrosshairTarget", wrapper);
+
+		RE::GFxValue originalArt;
+		hud.GetMember("RefreshActivateButtonArt", &originalArt);
+		if (!originalArt.IsUndefined()) {
+			static auto* artHandler = new RefreshActivateButtonArt();
+			RE::GFxValue artWrapper;
+			movie->CreateFunction(&artWrapper, artHandler);
+			hud.SetMember(ORIGINAL_ART, originalArt);
+			hud.SetMember("RefreshActivateButtonArt", artWrapper);
+		}
 		installed = true;
 		logger::info("HUD: action stack installed");
 	}
