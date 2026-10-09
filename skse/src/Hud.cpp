@@ -145,6 +145,31 @@ namespace
 		return art;
 	}
 
+	// A field of ours shows and hides with the HUD's modes (menus, sneaking, dialogue...) exactly like
+	// the HUD's own Activate button: the HUD's ShowElements sets _visible on every element of its
+	// HudElements list to "does it have the current mode as a property". So copy the button's mode
+	// flags and join the list.
+	void FollowHudModes(RE::GFxValue& a_field, const RE::GFxValue& a_button)
+	{
+		a_button.VisitMembers([&](const char* a_member, const RE::GFxValue& a_value) {
+			if (a_member && a_member[0] != '_' && a_value.IsBool() && a_value.GetBool()) {
+				a_field.SetMember(a_member, a_value);
+			}
+		});
+		for (const auto* mode : { "All", "Favor", "StealthMode", "Swimming" }) {  // the vanilla and Oathvein set
+			RE::GFxValue flag;
+			if (a_button.GetMember(mode, &flag) && flag.IsBool() && flag.GetBool()) {
+				a_field.SetMember(mode, flag);
+			}
+		}
+		const auto ui = RE::UI::GetSingleton();
+		const auto menu = ui ? ui->GetMenu(RE::HUDMenu::MENU_NAME) : nullptr;
+		RE::GFxValue elements;
+		if (menu && menu->uiMovie && menu->uiMovie->GetVariable(&elements, "_root.HUDMovieBaseInstance.HudElements") && elements.IsArray()) {
+			elements.PushBack(a_field);
+		}
+	}
+
 	// An extra button field, made once next to the HUD's own Activate button
 	RE::GFxValue Field(RE::GFxValue& a_button, const std::string& a_name)
 	{
@@ -177,6 +202,7 @@ namespace
 			RE::GFxValue align;
 			a_button.GetMember("autoSize", &align);
 			field.SetMember("autoSize", align);
+			FollowHudModes(field, a_button);
 		}
 		return field;
 	}
@@ -279,6 +305,7 @@ namespace
 			field.SetMember("embedFonts", RE::GFxValue(true));
 			field.SetMember("html", RE::GFxValue(true));
 			field.SetMember("autoSize", RE::GFxValue("left"));
+			FollowHudModes(field, a_button);
 		}
 		// the prompt's own font (face, size, colour): the first FONT tag of its HTML
 		const auto html = HtmlOf(a_text);

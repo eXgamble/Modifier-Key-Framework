@@ -1,11 +1,11 @@
 [center][size=6][b]Modifier Key Framework[/b][/size]
-[size=3]Custom activation actions for NPCs, with one shared modifier key for a second action.
+[size=3]Custom activation actions for NPCs, with one shared modifier key for up to three more.
 No plugin. No perks. Just a JSON file.[/size][/center]
 
 [size=5][b]What is this?[/b][/size]
-A small SKSE framework that lets mods add their own actions when you activate an NPC: [i]Give Potion[/i], [i]Search[/i], [i]Wait Here[/i], anything a mod needs. A mod can give each NPC two actions: one when you activate normally, and a second one while you hold the [b]modifier key[/b].
+A small SKSE framework that lets mods add their own actions when you activate an NPC: [i]Give Potion[/i], [i]Search[/i], [i]Pick Up Carcass[/i], anything a mod needs. A mod can give an NPC a normal action, and up to three more while you hold the [b]modifier key[/b].
 
-[b]For players:[/b] install it if a mod you use requires it. That's all; there is nothing to configure unless you want another key.
+[b]For players:[/b] install it if a mod you use requires it. That's all; there is nothing to configure unless you want other keys.
 
 [b]For mod authors:[/b] a lightweight alternative to perk-based activation and Dynamic Activation Key. Declare a rule in JSON, handle an event in Papyrus, done.
 
@@ -15,15 +15,22 @@ I used Dynamic Activation Key for my own mods, and two things kept bothering me:
 [*][b]The prompt lost the name.[/b] A DAK action replaces the whole activation prompt, so instead of [i]Search[/i] above [i]Lydia[/i] you only get [i]Search[/i]. You can't tell at a glance who or what you're about to act on, which I found really frustrating.
 [*][b]There's no hint that a second action exists.[/b] Nothing on screen tells you that holding a key does something different, so players either read the mod page or never find out. That's bad UX.
 [/list]
-So Modifier Key Framework keeps the vanilla two-line prompt with the name underneath, and shows a small [b]+[/b] whenever a second action is available.
+So Modifier Key Framework keeps the vanilla two-line prompt with the name underneath, and shows the modifier key's own button whenever more actions are available.
 
 [size=5][b]What you see in game[/b][/size]
 The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
 [list]
-[*][b]Give Potion +[/b] / Lydia: the [b]+[/b] tells you a second action is available.
-[*]Hold the modifier key and the prompt switches to the second action: [b]Search[/b] / Lydia.
+[*][b][LB] | [A] Give Potion[/b] / Lydia (keyboard: [b][Shift] | [E] Give Potion[/b]): the modifier key's button in front of the Activate button tells you more actions are available. The buttons are the same images your HUD uses for its own, and switch between keyboard and controller with it.
+[*]Hold the modifier key and the prompt switches to the action on that key: [b][A] Search[/b] / Lydia.
+[*]With more than one action on the modifier key, they stack up like a controller's face buttons:
+[code] [Y]  Skin Animal
+ [X]  Harvest Meat
+ [A]  Pick Up Carcass
+      Deer[/code]
 [/list]
-One key for every mod that uses the framework: [b]Left Shift[/b] on keyboard, [b]Left Shoulder[/b] on gamepad. Both, and the [b]+[/b] marker, can be changed in [i]SKSE/Plugins/ModifierKeyFramework.ini[/i].
+[b]The buttons belong to positions, not to mods:[/b] one action is always A, two are always A and X, three are A, X and Y, whichever mod they come from. Learn it once, use it everywhere.
+
+Defaults: modifier [b]Left Shift[/b] / [b]Left Shoulder[/b]; the second and third action use the game's [i]Ready Weapon[/i] (R / X) and [i]Jump[/i] (Space / Y) controls, so your own key bindings apply. Those controls only do the action while you hold the modifier over someone who has it; everywhere else they work as always. Everything can be changed in [i]SKSE/Plugins/ModifierKeyFramework.ini[/i], including a plain text marker ([b]+[/b]) instead of the button.
 
 [size=5][b]Requirements[/b][/size]
 [list]
@@ -36,29 +43,35 @@ There is no .esp, so it takes no load order slot and can be added or removed at 
 [size=5][b]For mod authors[/b][/size]
 One JSON file per mod in [i]SKSE/Plugins/ModifierKeyFramework/[/i]:
 [code]{
-  "version": 1,
+  "version": 3,
   "rules": [
     {
-      "id": "downed",
-      "requires": { "item": "MyMod.esp|0x807", "alive": true },
-      "not": { "faction": "Skyrim.esm|0x2BE3B" },
-      "primary":   { "label": "Give Potion", "event": "MyMod_GivePotion" },
-      "alternate": { "label": "Search",      "event": "MyMod_Search" },
-      "priority": 50
+      "id": "carcass",
+      "requires": { "alive": false, "keyword": "Skyrim.esm|0x13798" },
+      "primary": {},
+      "alternate": [
+        { "label": "Pick Up Carcass", "event": "MyMod_Action" },
+        { "label": "Harvest Meat",    "event": "MyMod_Action" },
+        { "label": "Skin Animal",     "event": "MyMod_Action" }
+      ],
+      "priority": 10
     }
   ]
 }[/code]
-Activating sends an SKSE mod event to your script, with the NPC, the rule's id, and whether the primary or alternate action was used:
-[code]Event OnMyAction(String asEventName, String asRuleId, Float afIsAlternate, Form akTarget)[/code]
+Activating sends an SKSE mod event to your script, with the NPC, the rule's id, and which action was used (0 the normal one, 1 to 3 the modifier actions in order):
+[code]Event OnMyAction(String asEventName, String asRuleId, Float afAction, Form akTarget)[/code]
 [list]
+[*][b]One alternate or a list:[/b] [i]"alternate": { ... }[/i] for a single modifier action, or a list of up to three in order of importance (rule format 3). The framework gives out the buttons.
+[*][b]Keep the vanilla text:[/b] a [b]primary[/b] without a label keeps the game's own prompt ([i]Search[/i] on a dead body, [i]Talk[/i]), in the player's language. [i]"primary": {}[/i] keeps the activation fully vanilla.
 [*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat. Lists mean "any of these", and a [b]not[/b] block excludes.
 [*][b]Optional mods welcome:[/b] a form from a plugin that isn't installed is simply ignored.
-[*][b]Priorities with a conflict log:[/b] when two mods want the same NPC, the higher priority wins, ties are always resolved the same way (never by install order), and the log says who won and who lost.
+[*][b]Priorities with a conflict log:[/b] when two mods want the same NPC, the higher priority wins and brings all its actions, ties are always resolved the same way (never by install order), and the log says who won and who lost.
 [*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
 [*][b]Papyrus API:[/b] version, is the key held, and switch your rules on or off at runtime (e.g. from your MCM).
 [*][b]Label only:[/b] leave out the event and only the label changes; activation stays vanilla.
-[*][b]Clear errors:[/b] typos, wrong form types and bad IDs are reported in [i]ModifierKeyFramework.log[/i] instead of silently doing nothing.
+[*][b]Clear errors:[/b] typos, wrong form types and bad IDs are reported in [i]ModifierKeyFramework.log[/i] instead of silently doing nothing. A rule file written for a newer framework is skipped with a message to update.
 [*][b]Editor support:[/b] a JSON schema for autocomplete and checks in VS Code and other editors.
+[*][b]Backward compatible:[/b] rule files and scripts written for 1.0 work unchanged.
 [/list]
 Full documentation, a complete example mod and a [b]Coming from Dynamic Activation Key[/b] guide are on [url=https://github.com/eXgamble/Modifier-Key-Framework]GitHub[/url].
 
@@ -66,15 +79,19 @@ Full documentation, a complete example mod and a [b]Coming from Dynamic Activati
 [list]
 [*][b]No plugin, no perk:[/b] a rule file instead of perk entry points, conditions and perk distribution; your plugin doesn't have to master anything.
 [*][b]The name stays on the prompt:[/b] [i]Search[/i] above [i]Lydia[/i], like vanilla, where a DAK action shows only [i]Search[/i].
-[*][b]Players can see that a second action exists:[/b] the [b]+[/b] marker ([i]Give Potion +[/i]). DAK gives no hint at all.
+[*][b]Players can see that more actions exist:[/b] the modifier key's button on the prompt. DAK gives no hint at all.
+[*][b]Up to four actions per NPC[/b], each on its own button, the same layout for every mod.
 [*][b]Two mods on one NPC[/b] are resolved by priority, deterministically, and logged.
 [*]DAK still has the Creation Kit's full condition set and works on more than NPCs. For conditions this framework doesn't have, give the NPC a keyword, faction or token item (SPID, KID, script) and require that.
 [/list]
 
 [size=5][b]Compatibility[/b][/size]
 [list]
+[*][b]HUD and UI mods:[/b] the buttons are drawn into the game's own HUD, no files replaced. Works with any HUD that keeps the vanilla activation prompt (tested with vanilla-based skins such as Oathvein UI). If a HUD has no image for a button, the text marker is shown instead.
+[*][b]Controller layouts with LB combos[/b] (e.g. Kontrol): if they put their own actions on Left Shoulder + X or Y (zoom, favorites), those still happen while you use the second or third action. Move them, or give the framework another modifier key.
 [*][b]Dynamic Activation Key:[/b] can be installed alongside, but [b]give it a different key[/b]. With the same key, a DAK action and a Modifier Key Framework action on the same NPC both trigger, and DAK's wins (it acts before the NPC's own activation).
 [*][b]Immersive Interactions - Animated Actions[/b] and [b]First Person Interactions[/b] (its Addon plugin): their [i]Pet[/i] action on horses (and [i]Wave[/i] / [i]Applaud[/i] on people) works through Dynamic Activation Key, so the point above applies. Give DAK a different key, or turn [i]Pet Animals[/i] off in their MCM.
+[*][b]QuickLoot-style mods:[/b] they take over activating containers and dead bodies, so actions on dead NPCs may not be reachable while their loot window shows.
 [*][b]Read Or Take / Use Or Take:[/b] no overlap (they handle items and books, this handles NPCs), and the same key works for all.
 [*]Mods that replace NPC activation through perks may take priority on the NPCs they affect.
 [/list]
@@ -94,8 +111,8 @@ The plugin is GPL-3.0-or-later (it statically links CommonLibSSE-NG); source on 
 [/list]
 
 [size=5][b]Future plans[/b][/size]
-The framework will stay small and focused: it decides [i]which[/i] action a target gets and shows it; what the action does stays in the mod that uses it.
+The framework will stay small and focused: it decides [i]which[/i] actions a target gets and shows them; what an action does stays in the mod that uses it.
 [list]
-[*][b]More target types[/b], one at a time: [b]containers[/b], [b]activators[/b], [b]furniture and doors[/b], and eventually [b]books and loose items[/b], so every second action in the game looks the same: the name on the prompt and the [b]+[/b] marker. Existing rule files keep working.
+[*][b]More target types[/b], one at a time: [b]containers[/b], [b]activators[/b], [b]furniture and doors[/b], and eventually [b]books and loose items[/b], so every extra action in the game looks the same: the name on the prompt and the modifier key's button. Existing rule files keep working.
 [*]Suggestions welcome: tell me in the comments which targets or conditions your mod needs.
 [/list]

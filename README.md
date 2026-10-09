@@ -279,6 +279,20 @@ a gamepad button (default Left Shoulder), whether the prompt shows the modifier 
 game controls for the second and third modifier action (`sSlot2Control`, default Ready Weapon;
 `sSlot3Control`, default Jump; also possible: Sneak, Shout, Auto-Move, Toggle Always Run).
 
+## Compatibility
+
+- **HUD and UI mods:** the buttons are drawn into the game's own HUD at runtime (the HUD's
+  `SetCrosshairTarget` and `RefreshActivateButtonArt` are wrapped, no swf is replaced), so any HUD
+  that keeps the vanilla activation prompt works; tested with Oathvein UI. The images are the HUD's
+  own (`360_X.png`, `R.png`, ...) and follow its keyboard/controller switch. A HUD without an image
+  for a button gets the text marker instead.
+- **Controller layouts with LB combos** (e.g. Kontrol): actions they put on Left Shoulder + X or Y
+  still happen alongside the second and third modifier action. Move them, or pick another modifier.
+- **Dynamic Activation Key:** give it a different key. With the same key, its perk-based action acts
+  before the NPC's own activation and wins.
+- **QuickLoot-style mods** take over activating dead bodies and containers, so actions on dead NPCs
+  may not be reachable while their window shows.
+
 ## Building
 
 Same toolchain as the author's other plugins: Visual Studio 2022/2026 Build Tools (C++ workload,
