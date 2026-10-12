@@ -1,6 +1,6 @@
 # Modifier Key Framework
 
-An SKSE framework for Skyrim Anniversary Edition (1.6.x and 1.7.x) that lets mods add their own
+An SKSE framework for Skyrim Special Edition and Anniversary Edition (1.5.97, 1.6.x and 1.7.x; one DLL for all) that lets mods add their own
 activation actions to NPCs and creatures, living or dead (bodies too), and (1.4.0) to books, items,
 doors and containers, declared in simple JSON files, with one shared **modifier key** for a
 second action. An alternative to perk-based activation and Dynamic Activation Key: no plugin, no
