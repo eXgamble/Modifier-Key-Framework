@@ -246,6 +246,22 @@ door, whoever owns the place it leads to (for a household, the friendliest grown
 Nobody (no owner, or they're all dead): the game's own line stays. The rank names can be translated in
 `Interface/Translations/ModifierKeyFramework_<LANGUAGE>.txt`.
 
+The nine rank names say more than most mods do with them, so a rule can use its own words instead: `"infoLabels"`
+lists a word per rank range, and the first entry whose `fromRank` the rank reaches is shown (4 Lover, 3 Ally,
+2 Confidant, 1 Friend, 0 Acquaintance, -1 Rival, -2 Foe, -3 Enemy, -4 Archnemesis; an entry without `fromRank`
+covers every rank). A rank below every entry keeps the game's own line.
+
+```jsonc
+"alternate": {
+  "label": "Knock", "event": "MySimplyKnock_Knock",
+  "info": "relationship",
+  "infoLabels": [
+    { "fromRank": 1, "label": "Friend" },   // Friend and better
+    { "label": "Unwelcome" }                // everyone else
+  ]
+}
+```
+
 ```jsonc
 {
   "version": 5,

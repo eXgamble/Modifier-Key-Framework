@@ -259,7 +259,7 @@ namespace
 		if (!a_json.is_object()) {
 			throw RuleError{ std::format("\"{}\" must be an object", a_name) };
 		}
-		CheckKeys(a_json, { "label", "event", "topic", "endDialogue", "do", "info" }, std::format("\"{}\"", a_name));
+		CheckKeys(a_json, { "label", "event", "topic", "endDialogue", "do", "info", "infoLabels" }, std::format("\"{}\"", a_name));
 		Rules::Do act = Rules::Do::kNone;
 		if (a_json.contains("do")) {
 			if (currentVersion < 5) {
@@ -300,6 +300,34 @@ namespace
 				throw RuleError{ std::format("\"{}\": \"info\" is \"relationship\"", a_name) };
 			}
 			action.info = Rules::Info::kRelationship;
+		}
+		if (a_json.contains("infoLabels")) {
+			if (action.info != Rules::Info::kRelationship) {
+				throw RuleError{ std::format("\"{}\": \"infoLabels\" needs \"info\": \"relationship\"", a_name) };
+			}
+			const auto& list = a_json["infoLabels"];
+			if (!list.is_array() || list.empty()) {
+				throw RuleError{ std::format("\"{}\": \"infoLabels\" must be a list of {{ \"fromRank\", \"label\" }}", a_name) };
+			}
+			for (const auto& entry : list) {
+				if (!entry.is_object()) {
+					throw RuleError{ std::format("\"{}\": each \"infoLabels\" entry must be an object", a_name) };
+				}
+				CheckKeys(entry, { "fromRank", "label" }, std::format("\"{}\" infoLabels entry", a_name));
+				Rules::RankLabel rankLabel;
+				if (!entry.contains("label") || !entry["label"].is_string() || entry["label"].get<std::string>().empty()) {
+					throw RuleError{ std::format("\"{}\": each \"infoLabels\" entry needs a \"label\" (text)", a_name) };
+				}
+				rankLabel.label = entry["label"].get<std::string>();
+				if (entry.contains("fromRank")) {
+					if (!entry["fromRank"].is_number_integer() || entry["fromRank"].get<std::int32_t>() < -4 || entry["fromRank"].get<std::int32_t>() > 4) {
+						throw RuleError{ std::format("\"{}\": \"fromRank\" is a whole number from -4 (Archnemesis) to 4 (Lover)", a_name) };
+					}
+					rankLabel.fromRank = entry["fromRank"].get<std::int32_t>();
+				}
+				action.infoLabels.push_back(std::move(rankLabel));
+			}
+			std::ranges::stable_sort(action.infoLabels, std::ranges::greater{}, &Rules::RankLabel::fromRank);
 		}
 		if (a_json.contains("topic") && a_target == Rules::Target::kObject) {
 			throw RuleError{ std::format("\"{}\": \"topic\" is for NPC rules", a_name) };
@@ -636,20 +664,29 @@ namespace Rules
 		return found != translations.end() ? found->second : std::string{ a_fallback };
 	}
 
+	std::string LabelText(const std::string& a_label)
+	{
+		std::string translated;
+		if (!a_label.starts_with('$')) {
+			return a_label;
+		}
+		if (const auto found = translations.find(a_label); found != translations.end()) {
+			return found->second;
+		}
+		if (SKSE::Translation::Translate(a_label, translated)) {  // a key from a file SKSE loaded itself
+			return translated;
+		}
+		static std::set<std::string> warned;
+		if (warned.insert(a_label).second) {
+			logger::warn("No translation for label \"{}\" (Interface/Translations), shown as is", a_label);
+		}
+		return a_label;
+	}
+
 	const std::string& Action::Text() const
 	{
 		if (!text) {
-			std::string translated;
-			if (!label.starts_with('$')) {
-				text = label;
-			} else if (const auto found = translations.find(label); found != translations.end()) {
-				text = found->second;
-			} else if (SKSE::Translation::Translate(label, translated)) {  // a key from a file SKSE loaded itself
-				text = std::move(translated);
-			} else {
-				logger::warn("No translation for label \"{}\" (Interface/Translations), shown as is", label);
-				text = label;
-			}
+			text = LabelText(label);
 		}
 		return *text;
 	}

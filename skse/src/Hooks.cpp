@@ -116,9 +116,20 @@ namespace
 		// "info": the name line stays, the game's lines below it (a lock level, ...) make way. The info line gets the
 		// game's diamond, like its own lock level line.
 		if (action.info == Rules::Info::kRelationship) {
-			if (const auto rank = Relationship::Of(a_target)) {
+			const auto rank = Relationship::Of(a_target);
+			// the rule's own word for the rank (the first entry the rank reaches), or the game's rank name
+			std::optional<std::string> word;
+			if (rank && action.infoLabels.empty()) {
+				word = Relationship::Name(*rank);
+			} else if (rank) {
+				const auto entry = std::ranges::find_if(action.infoLabels, [&](const Rules::RankLabel& a_entry) { return *rank >= a_entry.fromRank; });
+				if (entry != action.infoLabels.end()) {
+					word = Rules::LabelText(entry->label);
+				}
+			}
+			if (word) {
 				rest = std::format("{}\n<img src='DiamondMarker' width='10' height='15' align='baseline' vspace='5'>{}",
-					rest.substr(0, rest.find('\n', 1)), Relationship::Name(*rank));
+					rest.substr(0, rest.find('\n', 1)), *word);
 			}
 		}
 		a_dst = (label + rest).c_str();

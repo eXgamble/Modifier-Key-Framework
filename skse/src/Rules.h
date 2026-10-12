@@ -30,7 +30,8 @@
 // ("type", "base", "read", "locked", ...), and actions that do one of the game's own things ("do": "take", "equip",
 // "equipAndDraw", "use", "activate") instead of sending an event. An action's "info": "relationship" shows, while it's
 // the action on Activate, how the people behind the target feel about the player instead of the game's last prompt line
-// (a door's lock level, ...).
+// (a door's lock level, ...): the game's rank names, or the rule's own words per rank ("infoLabels": [{ "fromRank": 1,
+// "label": "Friend" }, { "label": "Unwelcome" }]: the first entry whose fromRank the rank reaches).
 //
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
@@ -81,6 +82,13 @@ namespace Rules
 		kContainer = 1 << 14
 	};
 
+	// "infoLabels": the word shown from a relationship rank up (4 Lover ... 0 Acquaintance ... -4 Archnemesis)
+	struct RankLabel
+	{
+		std::int32_t fromRank = -4;
+		std::string  label;  // plain text, or "$Key"
+	};
+
 	struct Action
 	{
 		std::string label;  // plain text, or "$Key" from Interface/Translations
@@ -89,6 +97,7 @@ namespace Rules
 		bool                       endDialogue = false;
 		Do                         act = Do::kNone;  // format 5: a game action instead of an event
 		Info                       info = Info::kNone;  // format 5
+		std::vector<RankLabel>     infoLabels;          // highest fromRank first; empty = the game's rank names
 
 		// The label to show: a "$Key" translated (on first use, then cached), plain text as is
 		const std::string& Text() const;
@@ -167,6 +176,9 @@ namespace Rules
 
 	// A "$Key" from the framework's own or a rule file's translation file, or a_fallback
 	std::string Translate(const std::string& a_key, std::string_view a_fallback);
+
+	// A label to show: a "$Key" translated (any translation file), plain text as is
+	std::string LabelText(const std::string& a_label);
 
 	// Reads every rule file. Needs kDataLoaded (form look-ups).
 	void Load();
