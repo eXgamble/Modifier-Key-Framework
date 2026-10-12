@@ -224,6 +224,7 @@ keys, soul gems, doors and containers. Object rules use their own conditions:
 | `playerHasKey` | is locked and the player carries its key |
 | `destinationKeyword` | is a door whose other side is in a location with this keyword (e.g. `LocTypeHouse`) |
 | `playerSneaking` | the player is sneaking (NPC rules can use this one too) |
+| `interior` | is in an interior cell (NPC rules can use this one too) |
 
 Instead of an `event`, an action can `"do"` one of the game's own things:
 

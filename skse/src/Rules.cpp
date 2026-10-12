@@ -168,6 +168,7 @@ namespace
 			{ "owned", &Rules::Conditions::owned },
 			{ "takeable", &Rules::Conditions::takeable },
 			{ "playerSneaking", &Rules::Conditions::playerSneaking },
+			{ "interior", &Rules::Conditions::interior },
 		};
 		// which target each condition is for (the rest work for both)
 		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
@@ -175,7 +176,7 @@ namespace
 		constexpr std::string_view objectOnly[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
 			"playerHasKey", "owned", "takeable" };
 		constexpr std::string_view format5[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
-			"playerHasKey", "owned", "takeable", "playerSneaking" };
+			"playerHasKey", "owned", "takeable", "playerSneaking", "interior" };
 
 		for (const auto& [key, value] : a_block.items()) {
 			if (std::ranges::contains(format5, key) && currentVersion < 5) {
@@ -568,6 +569,7 @@ namespace
 			[&] { return flag(a_conditions.locked, [&] { return a_ref->IsLocked(); }); },
 			[&] { return flag(a_conditions.requiresKey, [&] { return a_ref->IsLocked() && a_ref->GetLockLevel() == RE::LOCK_LEVEL::kRequiresKey; }); },
 			[&] { return flag(a_conditions.playerSneaking, [&] { return RE::PlayerCharacter::GetSingleton()->IsSneaking(); }); },
+			[&] { return flag(a_conditions.interior, [&] { const auto cell = a_ref->GetParentCell(); return cell && cell->IsInteriorCell(); }); },
 			[&] { return flag(a_conditions.alive, [&] { return !actor->IsDead(); }); },
 			[&] { return flag(a_conditions.teammate, [&] { return actor->IsPlayerTeammate(); }); },
 			[&] { return flag(a_conditions.essential, [&] { return actor->IsEssential(); }); },

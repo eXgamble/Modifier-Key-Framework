@@ -124,6 +124,7 @@ namespace Rules
 		std::optional<bool>              takeable;  // can be picked up (not a book that can't be taken, a fixed light, ...)
 		// either target
 		std::optional<bool>              playerSneaking;
+		std::optional<bool>              interior;  // the target is in an interior cell
 	};
 
 	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)

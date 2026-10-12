@@ -177,7 +177,8 @@
         "requiresKey": { "description": "Object rules (version 5): is locked and only its key opens it.", "type": "boolean" },
         "playerHasKey": { "description": "Object rules (version 5): is locked and the player carries its key.", "type": "boolean" },
         "destinationKeyword": { "description": "Object rules (version 5): a door whose other side is in a location with this keyword.", "$ref": "#/definitions/forms" },
-        "playerSneaking": { "description": "Version 5: the player is sneaking.", "type": "boolean" }
+        "playerSneaking": { "description": "Version 5: the player is sneaking.", "type": "boolean" },
+        "interior": { "description": "Version 5: the target is in an interior cell.", "type": "boolean" }
       }
     }
   }
