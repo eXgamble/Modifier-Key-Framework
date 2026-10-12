@@ -1,5 +1,7 @@
 #include "Rules.h"
 
+#include "Dialogue.h"
+
 #include <nlohmann/json.hpp>
 
 namespace
@@ -12,12 +14,14 @@ namespace
 	// instead of half-understood. Files without it are version 1.
 	// 2 (1.1.0): "primary" and its "label" are optional (no label = the game's own prompt text).
 	// 3 (1.2.0): "alternate" can be a list of up to 3 actions (buttons: Activate, then slots 2 and 3).
-	constexpr std::int32_t RULE_FORMAT_VERSION = 3;
+	// 4 (1.3.0): the "topic" condition, and actions that pick a dialogue topic ("topic", "endDialogue").
+	constexpr std::int32_t RULE_FORMAT_VERSION = 4;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
 
-	std::string currentRule;  // "file / id" of the rule being read, for log messages
+	std::string  currentRule;  // "file / id" of the rule being read, for log messages
+	std::int32_t currentVersion = 1;  // the rule format of the file being read
 
 	// Why a rule can't be used: logged once, the rule is skipped
 	struct RuleError
@@ -152,6 +156,12 @@ namespace
 			} else if (key == "npc") {
 				ReadForms(value, key, "an NPC", conditions.npcs);
 				requireSome(conditions.npcs.size());
+			} else if (key == "topic") {
+				if (currentVersion < 4) {
+					throw RuleError{ "\"topic\" needs \"version\": 4" };
+				}
+				ReadForms(value, key, "a dialogue topic", conditions.topics);
+				requireSome(conditions.topics.size());
 			} else if (const auto flag = std::ranges::find_if(flags, [&](const auto& a_flag) { return a_flag.first == key; }); flag != std::end(flags)) {
 				if (!value.is_boolean()) {
 					throw RuleError{ std::format("\"{}\" must be true or false", key) };
@@ -181,7 +191,7 @@ namespace
 		if (!a_json.is_object()) {
 			throw RuleError{ std::format("\"{}\" must be an object", a_name) };
 		}
-		CheckKeys(a_json, { "label", "event" }, std::format("\"{}\"", a_name));
+		CheckKeys(a_json, { "label", "event", "topic", "endDialogue" }, std::format("\"{}\"", a_name));
 		if (a_json.contains("label") ? !a_json["label"].is_string() || a_json["label"].get<std::string>().empty() : a_labelRequired) {
 			throw RuleError{ std::format("\"{}\" needs a \"label\" (text)", a_name) };
 		}
@@ -191,6 +201,27 @@ namespace
 		Rules::Action action;
 		action.label = a_json.value("label", "");
 		action.event = a_json.value("event", "");
+		if (a_json.contains("topic") || a_json.contains("endDialogue")) {
+			if (currentVersion < 4) {
+				throw RuleError{ std::format("\"{}\": \"topic\" and \"endDialogue\" need \"version\": 4", a_name) };
+			}
+			if (!action.event.empty()) {
+				throw RuleError{ std::format("\"{}\": give it an \"event\" or a \"topic\", not both", a_name) };
+			}
+			if (!a_json.contains("topic")) {
+				throw RuleError{ std::format("\"{}\": \"endDialogue\" needs a \"topic\"", a_name) };
+			}
+			ReadForms(a_json["topic"], "topic", "a dialogue topic", action.topics);
+			if (action.topics.empty()) {
+				throw RuleError{ std::format("\"{}\": none of the listed topics' plugins are loaded", a_name) };
+			}
+			if (a_json.contains("endDialogue")) {
+				if (!a_json["endDialogue"].is_boolean()) {
+					throw RuleError{ std::format("\"{}\": \"endDialogue\" must be true or false", a_name) };
+				}
+				action.endDialogue = a_json["endDialogue"].get<bool>();
+			}
+		}
 		return action;
 	}
 
@@ -239,6 +270,7 @@ namespace
 		}
 
 		const std::int32_t fileVersion = root.value("version", 1);
+		currentVersion = fileVersion;
 		LoadTranslations(root.value("translations", a_path.stem().string()));
 
 		std::size_t loaded = 0;
@@ -279,7 +311,7 @@ namespace
 						rule.alternates.push_back(ReadAction(alternate, "alternate", true));
 					}
 				}
-				if (rule.primary.label.empty() && rule.primary.event.empty() && rule.alternates.empty()) {
+				if (rule.primary.label.empty() && rule.primary.event.empty() && rule.primary.topics.empty() && rule.alternates.empty()) {
 					throw RuleError{ "the rule changes nothing: give it a primary label or event, or an alternate" };
 				}
 				if (entry.contains("requires")) {
@@ -366,6 +398,7 @@ namespace
 				             (!a_faction.minRank || a_actor->GetFactionRank(a_faction.faction, a_actor->IsPlayerRef()) >= *a_faction.minRank);
 				  }); },
 			[&] { return anyOf(a_conditions.items, [&](RE::TESBoundObject* a_item) { return a_inventory.Carries(a_item); }); },
+			[&] { return anyOf(a_conditions.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(a_actor, a_topic); }); },
 		};
 
 		for (const auto& test : tests) {
@@ -454,6 +487,17 @@ namespace Rules
 			}
 		}
 		return nullptr;
+	}
+
+	std::vector<const Action*> Alternates(const Rule& a_rule, RE::Actor* a_actor)
+	{
+		std::vector<const Action*> available;
+		for (const auto& action : a_rule.alternates) {
+			if (action.topics.empty() || std::ranges::any_of(action.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(a_actor, a_topic); })) {
+				available.push_back(&action);
+			}
+		}
+		return available;
 	}
 
 	Rule* Find(std::string_view a_file, std::string_view a_id)

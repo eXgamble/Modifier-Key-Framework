@@ -2,6 +2,7 @@
 // Mods declare activation rules for NPCs in JSON; the framework shows the prompt, runs the actions
 // (SKSE mod events), handles the shared modifier key, and offers a small Papyrus API.
 
+#include "Dialogue.h"
 #include "Hooks.h"
 #include "Hud.h"
 #include "Input.h"
@@ -35,6 +36,7 @@ namespace
 			Rules::Load();
 			Input::Register();
 			Hud::Register();
+			Dialogue::Install();
 		}
 	}
 }

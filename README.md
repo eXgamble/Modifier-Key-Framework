@@ -58,7 +58,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -72,6 +72,9 @@ Each rule:
 | `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
 | `primary` | `{ "label": ..., "event": ... }`: the label shown, and the SKSE mod event sent on activation. Without an `event`, only the label changes and activation stays vanilla. Without a `label`, the prompt keeps the game's own text (`Search` on a dead body, `Talk`, in the player's language). Format `2`: `primary` itself is optional, `"primary": {}` or leaving it out keeps the activation fully vanilla |
 | `alternate` | optional action used while the modifier key is held; needs a `label`. Format `3`: a list of up to 3 actions, in order of importance (see [More than one modifier action](#more-than-one-modifier-action)) |
+
+An action can pick a dialogue topic instead of sending an event (format `4`, see
+[Dialogue topics](#dialogue-topics)).
 | `priority` | when several rules match, the highest wins (default 0) |
 | `enabled` | optional, default `true`; `false` = off until a script turns it on (see [Papyrus API](#papyrus-api)) |
 
@@ -96,6 +99,7 @@ which means *any one of them*.
 | `sitting` | is sitting (furniture, or riding) |
 | `sleeping` | is asleep in a bed |
 | `inCombat` | is in combat |
+| `topic` | offers the dialogue topic right now (format `4`): its quest runs and one of its lines passes its conditions, e.g. a merchant whose shop is open (see [Dialogue topics](#dialogue-topics)) |
 
 The `true`/`false` conditions compare with the value given: `"teammate": false` in `requires`
 means *not* a teammate.
@@ -197,6 +201,35 @@ controller's face buttons:
 The X and Y controls do their normal job (drawing the weapon, jumping) everywhere else: the framework
 only takes them while the modifier key is held over a target whose rule has that many actions. One
 rule wins per target and brings all its actions; actions from different mods are never mixed.
+
+### Dialogue topics
+
+Format `4` (framework 1.3.0+). An action can name dialogue topics (`DIAL` records) instead of an
+event: activating starts the real conversation and picks the first listed topic the NPC offers, as
+if the player had chosen it. The NPC turns to the player, says the topic's line and does what that
+line does (open the barter menu, the training menu, ...), so nothing is skipped and the NPC stays in
+the conversation. With `"endDialogue": true` the conversation closes as soon as the menu the topic
+opened closes, instead of going back to the topic list.
+
+```jsonc
+{
+  "version": 4,
+  "rules": [{
+    "id": "merchants",
+    "requires": { "topic": "Skyrim.esm|0x7F6BB" },   // offers "What have you got for sale?"
+    "alternate": { "label": "Buy / Sell", "topic": "Skyrim.esm|0x7F6BB", "endDialogue": true }
+  }]
+}
+```
+
+- An action has an `event` or a `topic`, not both.
+- A modifier action with topics shows only while the NPC offers one of them; the actions after it
+  move up a button. A shop that is closed for the night drops its Buy / Sell, and an NPC who both
+  sells and trains gets both actions while both are on offer. The `afAction` number an event action
+  sends stays its place in the list, whichever button it lands on.
+- The `topic` condition answers the same question for the whole rule.
+- MKF - Merchants and Trainers (its own mod) is a
+  complete example.
 
 ### Translated labels
 

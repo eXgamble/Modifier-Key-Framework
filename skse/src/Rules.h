@@ -20,6 +20,12 @@
 // "alternate" can also be a list of up to 3 actions (rule format 3): while the modifier key is held
 // they get the buttons Activate, slot 2 and slot 3 (ini; X and Y on a controller), in that order.
 //
+// Rule format 4: a "topic" condition (the NPC offers one of these dialogue topics right now, e.g. "What have you got
+// for sale?"), and actions with "topic": instead of an event, the action starts the conversation and picks the first
+// listed topic the NPC offers, as if the player had chosen it. "endDialogue": true closes the conversation when the
+// menu that topic opened (barter, training, ...) closes. A modifier action with topics shows only while the NPC offers
+// one of them; the ones left move up a slot.
+//
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
 // match, the highest priority wins.
@@ -29,6 +35,8 @@ namespace Rules
 	{
 		std::string label;  // plain text, or "$Key" from Interface/Translations
 		std::string event;
+		std::vector<RE::TESTopic*> topics;  // format 4: pick one of these in dialogue instead of an event
+		bool                       endDialogue = false;
 
 		// The label to show: a "$Key" translated (on first use, then cached), plain text as is
 		const std::string& Text() const;
@@ -51,6 +59,7 @@ namespace Rules
 		std::vector<FactionCondition>    factions;
 		std::vector<RE::TESRace*>        races;
 		std::vector<RE::TESNPC*>         npcs;
+		std::vector<RE::TESTopic*>       topics;
 		std::optional<bool>              alive;
 		std::optional<bool>              teammate;
 		std::optional<bool>              essential;
@@ -98,6 +107,10 @@ namespace Rules
 
 	// The highest-priority rule the actor matches, or nullptr.
 	const Rule* Match(RE::Actor* a_actor);
+
+	// The rule's modifier actions the actor offers right now, in slot order (an action with topics only while the actor
+	// offers one of them).
+	std::vector<const Action*> Alternates(const Rule& a_rule, RE::Actor* a_actor);
 
 	// Logs (once per pair) each rule from another file that also matches the actor but lost to
 	// a_winner. Called on activation only, not for every prompt update.

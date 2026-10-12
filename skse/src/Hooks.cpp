@@ -1,5 +1,6 @@
 #include "Hooks.h"
 
+#include "Dialogue.h"
 #include "Hud.h"
 #include "Input.h"
 #include "Rules.h"
@@ -7,18 +8,24 @@
 
 namespace
 {
-	// The action Activate runs right now: the first modifier action while the modifier key is held
-	// (if the rule has one), otherwise the primary. index: 0 = primary, 1-3 = modifier action (slot).
+	// The action Activate runs right now: the first modifier action the actor offers while the modifier key is held,
+	// otherwise the primary. index: the action's place in the rule, 0 = primary, 1-3 = modifier action, the same number
+	// the mod event carries whichever slot the action ends up on.
 	struct Current
 	{
 		const Rules::Action& action;
 		std::int32_t         index;
 	};
 
-	Current CurrentAction(const Rules::Rule& a_rule)
+	std::int32_t IndexOf(const Rules::Rule& a_rule, const Rules::Action& a_action)
 	{
-		if (!a_rule.alternates.empty() && Input::IsModifierHeld()) {
-			return { a_rule.alternates.front(), 1 };
+		return &a_action == &a_rule.primary ? 0 : static_cast<std::int32_t>(&a_action - a_rule.alternates.data()) + 1;
+	}
+
+	Current CurrentAction(const Rules::Rule& a_rule, const std::vector<const Rules::Action*>& a_alternates)
+	{
+		if (!a_alternates.empty() && Input::IsModifierHeld()) {
+			return { *a_alternates.front(), IndexOf(a_rule, *a_alternates.front()) };
 		}
 		return { a_rule.primary, 0 };
 	}
@@ -46,20 +53,21 @@ namespace
 			if (!rule) {
 				Hud::ClearPrompt();
 			} else {
-				const auto [action, index] = CurrentAction(*rule);
+				const auto alternates = Rules::Alternates(*rule, actor);
+				const auto [action, index] = CurrentAction(*rule, alternates);
 				std::string label = action.label.empty() ? VanillaVerb(a_dst) : action.Text();
 				// a modifier action exists: the HUD draws the modifier key's button after the label, or
 				// (ini, or no HUD) the text marker goes on the label itself
-				const bool marker = !rule->alternates.empty() && index == 0;
+				const bool marker = !alternates.empty() && index == 0;
 				const bool iconMarker = marker && Settings::ModifierIcon() && Hud::Ready();
 				if (marker && !iconMarker && !Settings::AlternateMarker().empty()) {
 					label += " " + Settings::AlternateMarker();
 				}
 				// modifier held with more than one modifier action: the HUD shows the rest above
 				std::vector<std::string> extra;
-				if (index == 1) {
-					for (std::size_t slot = 1; slot < rule->alternates.size(); ++slot) {
-						extra.push_back(rule->alternates[slot].Text());
+				if (index != 0) {
+					for (std::size_t slot = 1; slot < alternates.size(); ++slot) {
+						extra.push_back(alternates[slot]->Text());
 					}
 				}
 				Hud::SetPrompt(actor, iconMarker, std::move(extra));
@@ -92,8 +100,17 @@ namespace
 		});
 	}
 
+	// An action with topics: the conversation opens the vanilla way and the topic is picked in it.
+	void PrepareTopic(const Rules::Rule& a_rule, const Rules::Action& a_action, std::int32_t a_index, RE::Actor* a_actor)
+	{
+		const char* name = a_actor->GetDisplayFullName();
+		logger::info("{} ({:08X}): {} / {} talks ({})", name ? name : "?", a_actor->GetFormID(), a_rule.file, a_rule.id, a_index == 0 ? "primary" : std::format("modifier action {}", a_index));
+		Dialogue::Prepare(a_actor, a_action.topics, a_action.endDialogue);
+	}
+
 	// The player activating an NPC a rule matches: run the rule's action (its mod event) instead of
-	// the vanilla one (dialogue). Anyone else activating, or no matching rule: vanilla.
+	// the vanilla one (dialogue), or for a topic action, the vanilla one with the topic picked.
+	// Anyone else activating, or no matching rule: vanilla.
 	struct Activate
 	{
 		static bool thunk(RE::TESNPC* a_this, RE::TESObjectREFR* a_targetRef, RE::TESObjectREFR* a_activatorRef, std::uint8_t a_arg3, RE::TESBoundObject* a_object, std::int32_t a_targetCount)
@@ -102,11 +119,14 @@ namespace
 				auto actor = a_targetRef->As<RE::Actor>();
 				if (const auto rule = Rules::Match(actor)) {
 					Rules::ReportConflicts(actor, rule);
-					if (const auto [action, index] = CurrentAction(*rule); !action.event.empty()) {
+					const auto alternates = Rules::Alternates(*rule, actor);
+					if (const auto [action, index] = CurrentAction(*rule, alternates); !action.event.empty()) {
 						SendRuleEvent(*rule, action, index, a_targetRef);
 						// "Not activated": with true, the game's activation code goes on to
 						// mount a horse (riding isn't part of this function, unlike dialogue)
 						return false;
+					} else if (!action.topics.empty()) {
+						PrepareTopic(*rule, action, index, actor);
 					}
 				}
 			}
@@ -139,13 +159,20 @@ namespace
 		const auto target = pick ? pick->GetActiveTarget().get() : nullptr;
 		const auto actor = target ? target->As<RE::Actor>() : nullptr;
 		const auto rule = Rules::Match(actor);
-		if (!rule || rule->alternates.size() <= alternate) {
+		const auto alternates = rule ? Rules::Alternates(*rule, actor) : std::vector<const Rules::Action*>{};
+		if (alternates.size() <= alternate) {
 			return false;
 		}
 		if (button->IsDown()) {
 			Rules::ReportConflicts(actor, rule);
-			if (const auto& action = rule->alternates[alternate]; !action.event.empty()) {
-				SendRuleEvent(*rule, action, static_cast<std::int32_t>(alternate) + 1, target.get());
+			const auto& action = *alternates[alternate];
+			const auto  index = IndexOf(*rule, action);
+			if (!action.event.empty()) {
+				SendRuleEvent(*rule, action, index, target.get());
+			} else if (const auto npc = actor->GetActorBase(); !action.topics.empty() && npc) {
+				// the vanilla activation (bypassing the hook, which would pick the Activate button's action)
+				PrepareTopic(*rule, action, index, actor);
+				Activate::func(npc, actor, RE::PlayerCharacter::GetSingleton(), 0, nullptr, 1);
 			}
 		}
 		return true;  // the whole press (down, held, up) belongs to the action
