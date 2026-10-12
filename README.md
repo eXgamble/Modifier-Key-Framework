@@ -239,6 +239,13 @@ Instead of an `event`, an action can `"do"` one of the game's own things:
 When taking would be a crime, the labels of `take`, `equip`, `equipAndDraw` and `use` show red, like
 the game's own `Steal`. NPC rules can only `"do": "activate"`.
 
+An action can also say what the prompt's last line shows while it's the action on Activate: `"info":
+"relationship"` puts how the people behind the target feel about the player (Lover, Ally, Confidant, Friend,
+Acquaintance, Rival, Foe, Enemy, Archnemesis) where the game shows a lock's level. That's the NPC itself; for a
+door, whoever owns the place it leads to (for a household, the friendliest grown-up); for anything else, its owner.
+Nobody (no owner, or they're all dead): the game's own line stays. The rank names can be translated in
+`Interface/Translations/ModifierKeyFramework_<LANGUAGE>.txt`.
+
 ```jsonc
 {
   "version": 5,

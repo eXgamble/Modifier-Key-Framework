@@ -7,6 +7,7 @@
 #include "Hud.h"
 #include "Input.h"
 #include "Papyrus.h"
+#include "Relationship.h"
 #include "Rules.h"
 #include "Settings.h"
 
@@ -37,6 +38,8 @@ namespace
 			Input::Register();
 			Hud::Register();
 			Dialogue::Install();
+		} else if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
+			Relationship::Reset();
 		}
 	}
 }

@@ -259,7 +259,7 @@ namespace
 		if (!a_json.is_object()) {
 			throw RuleError{ std::format("\"{}\" must be an object", a_name) };
 		}
-		CheckKeys(a_json, { "label", "event", "topic", "endDialogue", "do" }, std::format("\"{}\"", a_name));
+		CheckKeys(a_json, { "label", "event", "topic", "endDialogue", "do", "info" }, std::format("\"{}\"", a_name));
 		Rules::Do act = Rules::Do::kNone;
 		if (a_json.contains("do")) {
 			if (currentVersion < 5) {
@@ -292,6 +292,15 @@ namespace
 		action.label = a_json.value("label", "");
 		action.event = a_json.value("event", "");
 		action.act = act;
+		if (a_json.contains("info")) {
+			if (currentVersion < 5) {
+				throw RuleError{ std::format("\"{}\": \"info\" needs \"version\": 5", a_name) };
+			}
+			if (a_json["info"] != "relationship") {
+				throw RuleError{ std::format("\"{}\": \"info\" is \"relationship\"", a_name) };
+			}
+			action.info = Rules::Info::kRelationship;
+		}
 		if (a_json.contains("topic") && a_target == Rules::Target::kObject) {
 			throw RuleError{ std::format("\"{}\": \"topic\" is for NPC rules", a_name) };
 		}
@@ -621,6 +630,12 @@ namespace
 
 namespace Rules
 {
+	std::string Translate(const std::string& a_key, std::string_view a_fallback)
+	{
+		const auto found = translations.find(a_key);
+		return found != translations.end() ? found->second : std::string{ a_fallback };
+	}
+
 	const std::string& Action::Text() const
 	{
 		if (!text) {
@@ -642,6 +657,7 @@ namespace Rules
 	void Load()
 	{
 		rules.clear();
+		LoadTranslations("ModifierKeyFramework");  // the framework's own words (relationship ranks)
 		std::error_code ec;
 		if (!std::filesystem::is_directory(RULES_DIR, ec)) {
 			logger::info("No rule folder ({}), nothing to do", RULES_DIR);

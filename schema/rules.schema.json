@@ -99,6 +99,11 @@
           "type": "string",
           "enum": ["activate", "take", "equip", "equipAndDraw", "use"]
         },
+        "info": {
+          "description": "Version 5: what the prompt's last line shows while this is the action on Activate, instead of the game's (a lock level, ...). relationship = how the NPC, the people living behind a door, or an object's owner feel about the player.",
+          "type": "string",
+          "enum": ["relationship"]
+        },
         "endDialogue": {
           "description": "Version 4, with topic: close the conversation when the menu the topic opened (barter, training, gift, ...) closes.",
           "type": "boolean",

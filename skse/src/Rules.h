@@ -28,7 +28,9 @@
 //
 // Rule format 5: "target": "object" for things in the world (books, items, doors, containers), with object conditions
 // ("type", "base", "read", "locked", ...), and actions that do one of the game's own things ("do": "take", "equip",
-// "equipAndDraw", "use", "activate") instead of sending an event.
+// "equipAndDraw", "use", "activate") instead of sending an event. An action's "info": "relationship" shows, while it's
+// the action on Activate, how the people behind the target feel about the player instead of the game's last prompt line
+// (a door's lock level, ...).
 //
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
@@ -50,6 +52,13 @@ namespace Rules
 		kEquip,         // pick it up and equip it
 		kEquipAndDraw,  // pick it up, equip it, draw it
 		kUse            // pick it up and use it: drink, eat, apply a poison (or equip what can't be used)
+	};
+
+	// "info": what the prompt's last line shows instead of the game's own (a lock level, ...)
+	enum class Info
+	{
+		kNone,
+		kRelationship  // how the NPC, or the people living behind a door, or an object's owner, feel about the player
 	};
 
 	// "type" of an object target (bit flags)
@@ -79,6 +88,7 @@ namespace Rules
 		std::vector<RE::TESTopic*> topics;  // format 4: pick one of these in dialogue instead of an event
 		bool                       endDialogue = false;
 		Do                         act = Do::kNone;  // format 5: a game action instead of an event
+		Info                       info = Info::kNone;  // format 5
 
 		// The label to show: a "$Key" translated (on first use, then cached), plain text as is
 		const std::string& Text() const;
@@ -154,6 +164,9 @@ namespace Rules
 		std::vector<Action>   alternates;  // modifier actions in button order: Activate, slot 2, slot 3 (0-3 of them)
 		EnabledFlag           enabled;  // "enabled" in JSON (default true), then Papyrus
 	};
+
+	// A "$Key" from the framework's own or a rule file's translation file, or a_fallback
+	std::string Translate(const std::string& a_key, std::string_view a_fallback);
 
 	// Reads every rule file. Needs kDataLoaded (form look-ups).
 	void Load();

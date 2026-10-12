@@ -3,6 +3,7 @@
 #include "Dialogue.h"
 #include "Hud.h"
 #include "Input.h"
+#include "Relationship.h"
 #include "Rules.h"
 #include "Settings.h"
 
@@ -111,6 +112,14 @@ namespace
 		} else {
 			const char* name = a_target->GetDisplayFullName();
 			rest = std::format("\n{}", name ? name : "");
+		}
+		// "info": the name line stays, the game's lines below it (a lock level, ...) make way. The info line gets the
+		// game's diamond, like its own lock level line.
+		if (action.info == Rules::Info::kRelationship) {
+			if (const auto rank = Relationship::Of(a_target)) {
+				rest = std::format("{}\n<img src='DiamondMarker' width='10' height='15' align='baseline' vspace='5'>{}",
+					rest.substr(0, rest.find('\n', 1)), Relationship::Name(*rank));
+			}
 		}
 		a_dst = (label + rest).c_str();
 	}
