@@ -9,9 +9,9 @@
   "properties": {
     "$schema": { "type": "string" },
     "version": {
-      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional. Version 3 (framework 1.2.0): alternate can be a list of up to 3 actions. Version 4 (framework 1.3.0): the topic condition, and actions that pick a dialogue topic (topic, endDialogue).",
+      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional. Version 3 (framework 1.2.0): alternate can be a list of up to 3 actions. Version 4 (framework 1.3.0): the topic condition, and actions that pick a dialogue topic (topic, endDialogue). Version 5 (framework 1.4.0): object targets and do actions.",
       "type": "integer",
-      "enum": [1, 2, 3, 4]
+      "enum": [1, 2, 3, 4, 5]
     },
     "translations": {
       "description": "Name of the translation file for $Key labels: Interface/Translations/<name>_<LANGUAGE>.txt. Default: this file's name without .json.",
@@ -35,9 +35,9 @@
           "minLength": 1
         },
         "target": {
-          "description": "What the rule applies to. Only NPCs for now.",
+          "description": "What the rule applies to: NPCs, or (version 5) objects in the world (books, items, doors, containers), which use the object conditions.",
           "type": "string",
-          "enum": ["npc"],
+          "enum": ["npc", "object"],
           "default": "npc"
         },
         "requires": {
@@ -77,7 +77,7 @@
     "action": {
       "type": "object",
       "additionalProperties": false,
-      "not": { "required": ["event", "topic"] },
+      "not": { "anyOf": [{ "required": ["event", "topic"] }, { "required": ["event", "do"] }, { "required": ["topic", "do"] }] },
       "dependencies": { "endDialogue": ["topic"] },
       "properties": {
         "label": {
@@ -94,12 +94,21 @@
           "description": "Version 4, instead of an event: start the conversation and pick the first listed dialogue topic (DIAL) the NPC offers, as if the player had chosen it: the NPC turns to the player, says the line and does what it does (open the barter menu, ...).",
           "$ref": "#/definitions/forms"
         },
+        "do": {
+          "description": "Version 5, instead of an event: one of the game's own actions. activate = the vanilla activation; take = pick it up (a crime where the game says so); equip / equipAndDraw = pick up and equip (and draw); use = pick up and drink / eat / apply. Without a label, activate and take show the game's own word. NPC rules can only activate.",
+          "type": "string",
+          "enum": ["activate", "take", "equip", "equipAndDraw", "use"]
+        },
         "endDialogue": {
           "description": "Version 4, with topic: close the conversation when the menu the topic opened (barter, training, gift, ...) closes.",
           "type": "boolean",
           "default": false
         }
       }
+    },
+    "objectType": {
+      "type": "string",
+      "enum": ["book", "weapon", "armor", "potion", "food", "poison", "ingredient", "scroll", "torch", "ammo", "misc", "key", "soulGem", "door", "container"]
     },
     "formRef": {
       "description": "\"Plugin.esp|0xLocalID\" (light plugins too).",
@@ -151,7 +160,24 @@
         "unconscious": { "description": "Is unconscious.", "type": "boolean" },
         "sitting": { "description": "Is sitting (furniture, or riding).", "type": "boolean" },
         "sleeping": { "description": "Is asleep in a bed.", "type": "boolean" },
-        "inCombat": { "description": "Is in combat.", "type": "boolean" }
+        "inCombat": { "description": "Is in combat.", "type": "boolean" },
+        "type": {
+          "description": "Object rules (version 5): the object is one of these kinds.",
+          "oneOf": [
+            { "$ref": "#/definitions/objectType" },
+            { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/objectType" } }
+          ]
+        },
+        "base": { "description": "Object rules (version 5): is one of these base objects.", "$ref": "#/definitions/forms" },
+        "read": { "description": "Object rules (version 5): is a book the player has read.", "type": "boolean" },
+        "spellTome": { "description": "Object rules (version 5): is a spell tome.", "type": "boolean" },
+        "takeable": { "description": "Object rules (version 5): can be picked up.", "type": "boolean" },
+        "owned": { "description": "Object rules (version 5): taking it is a crime.", "type": "boolean" },
+        "locked": { "description": "Object rules (version 5): is locked.", "type": "boolean" },
+        "requiresKey": { "description": "Object rules (version 5): is locked and only its key opens it.", "type": "boolean" },
+        "playerHasKey": { "description": "Object rules (version 5): is locked and the player carries its key.", "type": "boolean" },
+        "destinationKeyword": { "description": "Object rules (version 5): a door whose other side is in a location with this keyword.", "$ref": "#/definitions/forms" },
+        "playerSneaking": { "description": "Version 5: the player is sneaking.", "type": "boolean" }
       }
     }
   }

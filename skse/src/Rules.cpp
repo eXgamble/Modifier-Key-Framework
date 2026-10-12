@@ -15,10 +15,12 @@ namespace
 	// 2 (1.1.0): "primary" and its "label" are optional (no label = the game's own prompt text).
 	// 3 (1.2.0): "alternate" can be a list of up to 3 actions (buttons: Activate, then slots 2 and 3).
 	// 4 (1.3.0): the "topic" condition, and actions that pick a dialogue topic ("topic", "endDialogue").
-	constexpr std::int32_t RULE_FORMAT_VERSION = 4;
+	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
+	constexpr std::int32_t RULE_FORMAT_VERSION = 5;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
+	bool                     objectRules = false;
 
 	std::string  currentRule;  // "file / id" of the rule being read, for log messages
 	std::int32_t currentVersion = 1;  // the rule format of the file being read
@@ -114,7 +116,34 @@ namespace
 	}
 
 	// A "requires" or "not" block
-	Rules::Conditions ReadConditions(const json& a_block, std::string_view a_blockName, bool a_isRequirement)
+	// "type": the object kinds by name
+	constexpr std::pair<std::string_view, std::uint32_t> OBJECT_TYPES[] = {
+		{ "book", Rules::kBook }, { "weapon", Rules::kWeapon }, { "armor", Rules::kArmor }, { "potion", Rules::kPotion },
+		{ "food", Rules::kFood }, { "poison", Rules::kPoison }, { "ingredient", Rules::kIngredient }, { "scroll", Rules::kScroll },
+		{ "torch", Rules::kTorch }, { "ammo", Rules::kAmmo }, { "misc", Rules::kMisc }, { "key", Rules::kKey },
+		{ "soulGem", Rules::kSoulGem }, { "door", Rules::kDoor }, { "container", Rules::kContainer },
+	};
+
+	std::uint32_t ReadTypes(const json& a_value)
+	{
+		const auto    list = a_value.is_array() ? a_value : json::array({ a_value });
+		std::uint32_t types = 0;
+		for (const auto& entry : list) {
+			const auto name = entry.is_string() ? entry.get<std::string>() : std::string{};
+			const auto type = std::ranges::find_if(OBJECT_TYPES, [&](const auto& a_type) { return a_type.first == name; });
+			if (type == std::end(OBJECT_TYPES)) {
+				std::string known;
+				for (const auto& [typeName, bit] : OBJECT_TYPES) {
+					known += std::format("{}{}", known.empty() ? "" : ", ", typeName);
+				}
+				throw RuleError{ std::format("\"type\": {} is not one of {}", entry.dump(), known) };
+			}
+			types |= type->second;
+		}
+		return types;
+	}
+
+	Rules::Conditions ReadConditions(const json& a_block, std::string_view a_blockName, bool a_isRequirement, Rules::Target a_target)
 	{
 		Rules::Conditions conditions;
 		if (!a_block.is_object()) {
@@ -131,9 +160,33 @@ namespace
 			{ "sitting", &Rules::Conditions::sitting },
 			{ "sleeping", &Rules::Conditions::sleeping },
 			{ "inCombat", &Rules::Conditions::inCombat },
+			{ "read", &Rules::Conditions::read },
+			{ "spellTome", &Rules::Conditions::spellTome },
+			{ "locked", &Rules::Conditions::locked },
+			{ "requiresKey", &Rules::Conditions::requiresKey },
+			{ "playerHasKey", &Rules::Conditions::playerHasKey },
+			{ "owned", &Rules::Conditions::owned },
+			{ "takeable", &Rules::Conditions::takeable },
+			{ "playerSneaking", &Rules::Conditions::playerSneaking },
 		};
+		// which target each condition is for (the rest work for both)
+		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
+			"bleedingOut", "unconscious", "sitting", "sleeping", "inCombat" };
+		constexpr std::string_view objectOnly[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
+			"playerHasKey", "owned", "takeable" };
+		constexpr std::string_view format5[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
+			"playerHasKey", "owned", "takeable", "playerSneaking" };
 
 		for (const auto& [key, value] : a_block.items()) {
+			if (std::ranges::contains(format5, key) && currentVersion < 5) {
+				throw RuleError{ std::format("\"{}\" needs \"version\": 5", key) };
+			}
+			if (a_target == Rules::Target::kObject && std::ranges::contains(npcOnly, key)) {
+				throw RuleError{ std::format("\"{}\" is for NPC rules, this rule's target is \"object\"", key) };
+			}
+			if (a_target == Rules::Target::kNPC && std::ranges::contains(objectOnly, key)) {
+				throw RuleError{ std::format("\"{}\" is for object rules (\"target\": \"object\")", key) };
+			}
 			// a form list that lost every entry to missing plugins can never hold
 			const auto requireSome = [&](std::size_t a_count) {
 				if (a_isRequirement && a_count == 0) {
@@ -156,6 +209,14 @@ namespace
 			} else if (key == "npc") {
 				ReadForms(value, key, "an NPC", conditions.npcs);
 				requireSome(conditions.npcs.size());
+			} else if (key == "type") {
+				conditions.types = ReadTypes(value);
+			} else if (key == "base") {
+				ReadForms(value, key, "an object", conditions.bases);
+				requireSome(conditions.bases.size());
+			} else if (key == "destinationKeyword") {
+				ReadForms(value, key, "a keyword", conditions.destinationKeywords);
+				requireSome(conditions.destinationKeywords.size());
 			} else if (key == "topic") {
 				if (currentVersion < 4) {
 					throw RuleError{ "\"topic\" needs \"version\": 4" };
@@ -186,12 +247,40 @@ namespace
 
 	// "primary" / "alternate": { "label": "...", "event": "..." } (event optional; the primary's
 	// label too: without one the prompt keeps the game's own text, e.g. "Search" on a dead body)
-	Rules::Action ReadAction(const json& a_json, std::string_view a_name, bool a_labelRequired)
+	// "do": the game's own actions
+	constexpr std::pair<std::string_view, Rules::Do> DO_ACTIONS[] = {
+		{ "activate", Rules::Do::kActivate }, { "take", Rules::Do::kTake }, { "equip", Rules::Do::kEquip },
+		{ "equipAndDraw", Rules::Do::kEquipAndDraw }, { "use", Rules::Do::kUse },
+	};
+
+	Rules::Action ReadAction(const json& a_json, std::string_view a_name, bool a_labelRequired, Rules::Target a_target)
 	{
 		if (!a_json.is_object()) {
 			throw RuleError{ std::format("\"{}\" must be an object", a_name) };
 		}
-		CheckKeys(a_json, { "label", "event", "topic", "endDialogue" }, std::format("\"{}\"", a_name));
+		CheckKeys(a_json, { "label", "event", "topic", "endDialogue", "do" }, std::format("\"{}\"", a_name));
+		Rules::Do act = Rules::Do::kNone;
+		if (a_json.contains("do")) {
+			if (currentVersion < 5) {
+				throw RuleError{ std::format("\"{}\": \"do\" needs \"version\": 5", a_name) };
+			}
+			const auto name = a_json["do"].is_string() ? a_json["do"].get<std::string>() : std::string{};
+			const auto found = std::ranges::find_if(DO_ACTIONS, [&](const auto& a_do) { return a_do.first == name; });
+			if (found == std::end(DO_ACTIONS)) {
+				throw RuleError{ std::format("\"{}\": \"do\" is one of activate, take, equip, equipAndDraw, use", a_name) };
+			}
+			act = found->second;
+			if (a_target == Rules::Target::kNPC && act != Rules::Do::kActivate) {
+				throw RuleError{ std::format("\"{}\": \"do\": \"{}\" is for object rules; NPC rules can only \"activate\"", a_name, name) };
+			}
+			if (a_json.contains("event") || a_json.contains("topic")) {
+				throw RuleError{ std::format("\"{}\": give it one of \"event\", \"topic\" or \"do\"", a_name) };
+			}
+		}
+		// take and activate have the game's own word ("Take" / "Steal", "Read", "Open", ...)
+		if (act == Rules::Do::kTake || act == Rules::Do::kActivate) {
+			a_labelRequired = false;
+		}
 		if (a_json.contains("label") ? !a_json["label"].is_string() || a_json["label"].get<std::string>().empty() : a_labelRequired) {
 			throw RuleError{ std::format("\"{}\" needs a \"label\" (text)", a_name) };
 		}
@@ -201,6 +290,10 @@ namespace
 		Rules::Action action;
 		action.label = a_json.value("label", "");
 		action.event = a_json.value("event", "");
+		action.act = act;
+		if (a_json.contains("topic") && a_target == Rules::Target::kObject) {
+			throw RuleError{ std::format("\"{}\": \"topic\" is for NPC rules", a_name) };
+		}
 		if (a_json.contains("topic") || a_json.contains("endDialogue")) {
 			if (currentVersion < 4) {
 				throw RuleError{ std::format("\"{}\": \"topic\" and \"endDialogue\" need \"version\": 4", a_name) };
@@ -225,14 +318,61 @@ namespace
 		return action;
 	}
 
-	// Interface/Translations/<name>_<LANGUAGE>.txt into the game's translation table (SKSE itself
-	// only loads files named after a plugin; a framework mod may have none). Each name once.
+	// "$Key" -> label, from the rule files' translation files. Kept here, not in the game's translation table: the
+	// game pools its strings case-insensitively, so "Equip" would come back as an existing "EQUIP".
+	std::unordered_map<std::string, std::string> translations;
+
+	// Interface/Translations/<name>_<LANGUAGE>.txt (UTF-16 LE, "$Key<tab>Text" lines; loose or in a BSA). Each name once.
 	void LoadTranslations(const std::string& a_name)
 	{
 		static std::set<std::string> loaded;
-		if (loaded.insert(a_name).second) {
-			SKSE::Translation::ParseTranslation(a_name);
+		if (!loaded.insert(a_name).second) {
+			return;
 		}
+		const auto setting = RE::INISettingCollection::GetSingleton()->GetSetting("sLanguage:General");
+		const std::string language = setting && setting->GetType() == RE::Setting::Type::kString ? setting->data.s : "ENGLISH";
+		const auto        path = std::format("Interface\\Translations\\{}_{}.txt", a_name, language);
+		RE::BSResourceNiBinaryStream stream{ path };
+		if (!stream.good()) {
+			return;
+		}
+		std::wstring  content;
+		wchar_t       character = 0;
+		std::uint64_t read = 0;
+		while (true) {
+			stream.stream->DoRead(&character, sizeof(character), read);
+			if (read != sizeof(character)) {
+				break;
+			}
+			content += character;
+		}
+		if (content.empty() || content.front() != 0xFEFF) {
+			logger::error("{}: must be UTF-16 LE with a BOM, labels from it won't show", path);
+			return;
+		}
+		std::size_t count = 0;
+		for (std::size_t start = 1; start < content.size();) {
+			auto end = content.find(L'\n', start);
+			if (end == std::wstring::npos) {
+				end = content.size();
+			}
+			std::wstring_view line{ content.data() + start, end - start };
+			start = end + 1;
+			if (line.ends_with(L'\r')) {
+				line.remove_suffix(1);
+			}
+			const auto tab = line.find(L'\t');
+			if (!line.starts_with(L'$') || tab == std::wstring_view::npos || tab < 2) {
+				continue;
+			}
+			const auto key = SKSE::stl::utf16_to_utf8(line.substr(0, tab));
+			const auto text = SKSE::stl::utf16_to_utf8(line.substr(tab + 1));
+			if (key && text) {
+				translations[*key] = *text;
+				++count;
+			}
+		}
+		logger::info("{}: {} label(s)", path, count);
 	}
 
 	void LoadFile(const std::filesystem::path& a_path)
@@ -291,10 +431,15 @@ namespace
 					}
 					rule.enabled.value = entry["enabled"].get<bool>();
 				}
-				if (entry.value("target", "npc") != "npc") {
-					throw RuleError{ "only \"target\": \"npc\" is supported" };
+				if (const auto target = entry.value("target", "npc"); target == "object") {
+					if (fileVersion < 5) {
+						throw RuleError{ "\"target\": \"object\" needs \"version\": 5" };
+					}
+					rule.target = Rules::Target::kObject;
+				} else if (target != "npc") {
+					throw RuleError{ "\"target\" is \"npc\" or \"object\"" };
 				}
-				rule.primary = ReadAction(entry.value("primary", json::object()), "primary", false);
+				rule.primary = ReadAction(entry.value("primary", json::object()), "primary", false, rule.target);
 				if (entry.contains("alternate")) {
 					const auto& alternate = entry["alternate"];
 					if (alternate.is_array()) {
@@ -305,20 +450,20 @@ namespace
 							throw RuleError{ std::format("\"alternate\" lists 1 to {} actions", MAX_ALTERNATES) };
 						}
 						for (std::size_t i = 0; i < alternate.size(); ++i) {
-							rule.alternates.push_back(ReadAction(alternate[i], std::format("alternate {}", i + 1), true));
+							rule.alternates.push_back(ReadAction(alternate[i], std::format("alternate {}", i + 1), true, rule.target));
 						}
 					} else {
-						rule.alternates.push_back(ReadAction(alternate, "alternate", true));
+						rule.alternates.push_back(ReadAction(alternate, "alternate", true, rule.target));
 					}
 				}
-				if (rule.primary.label.empty() && rule.primary.event.empty() && rule.primary.topics.empty() && rule.alternates.empty()) {
+				if (rule.primary.label.empty() && rule.primary.event.empty() && rule.primary.topics.empty() && rule.primary.act == Rules::Do::kNone && rule.alternates.empty()) {
 					throw RuleError{ "the rule changes nothing: give it a primary label or event, or an alternate" };
 				}
 				if (entry.contains("requires")) {
-					rule.requirements = ReadConditions(entry["requires"], "requires", true);
+					rule.requirements = ReadConditions(entry["requires"], "requires", true, rule.target);
 				}
 				if (entry.contains("not")) {
-					rule.exclusions = ReadConditions(entry["not"], "not", false);
+					rule.exclusions = ReadConditions(entry["not"], "not", false, rule.target);
 				}
 			} catch (const RuleError& e) {
 				logger::warn("{} / {}: {}, rule skipped", file, rule.id, e.what);
@@ -343,6 +488,9 @@ namespace
 
 		bool Carries(RE::TESBoundObject* a_item)
 		{
+			if (!actor) {
+				return false;
+			}
 			if (!counts) {
 				counts = actor->GetInventoryCounts([](RE::TESBoundObject& a_object) {
 					return std::ranges::any_of(rules, [&](const Rules::Rule& r) {
@@ -359,10 +507,43 @@ namespace
 		std::optional<RE::TESObjectREFR::InventoryCountMap> counts;
 	};
 
-	// a_all: every set condition must hold ("requires"); otherwise: does any set condition hold ("not")
-	bool Check(const Rules::Conditions& a_conditions, RE::Actor* a_actor, Inventory& a_inventory, bool a_all)
+	// A door's destination: the location on the other side
+	RE::BGSLocation* DestinationOf(RE::TESObjectREFR* a_door)
 	{
-		const auto state = a_actor->AsActorState();
+		const auto linked = a_door->extraList.GetTeleportLinkedDoor().get();
+		return linked ? linked->GetCurrentLocation() : nullptr;
+	}
+
+	bool PlayerHasKey(RE::TESObjectREFR* a_ref)
+	{
+		const auto lock = a_ref->GetLock();
+		const auto key = lock ? lock->key : nullptr;
+		if (!key) {
+			return false;
+		}
+		const auto counts = RE::PlayerCharacter::GetSingleton()->GetInventoryCounts([&](RE::TESBoundObject& a_object) { return &a_object == key; });
+		const auto it = counts.find(key);
+		return it != counts.end() && it->second > 0;
+	}
+
+	// Can be picked up: an item (not a book flagged can't-take, a light only if carryable)
+	bool Takeable(RE::TESObjectREFR* a_ref)
+	{
+		const auto type = Rules::TypeOf(a_ref);
+		if (type == 0 || type == Rules::kDoor || type == Rules::kContainer) {
+			return false;
+		}
+		const auto book = a_ref->GetBaseObject()->As<RE::TESObjectBOOK>();
+		return !book || book->CanBeTaken();
+	}
+
+	// a_all: every set condition must hold ("requires"); otherwise: does any set condition hold ("not")
+	bool Check(const Rules::Conditions& a_conditions, RE::TESObjectREFR* a_ref, Inventory& a_inventory, bool a_all)
+	{
+		const auto actor = a_ref->As<RE::Actor>();
+		const auto state = actor ? actor->AsActorState() : nullptr;
+		const auto base = a_ref->GetBaseObject();
+		const auto book = base ? base->As<RE::TESObjectBOOK>() : nullptr;
 		const auto flag = [](const std::optional<bool>& a_wanted, auto&& a_actual) -> std::optional<bool> {
 			if (!a_wanted) {
 				return std::nullopt;
@@ -376,29 +557,44 @@ namespace
 			return std::ranges::any_of(a_list, a_holds);
 		};
 
-		// cheapest first; each yields nullopt (not set), true (holds) or false
+		// cheapest first; each yields nullopt (not set), true (holds) or false. NPC conditions are only ever set in NPC
+		// rules and object conditions in object rules (the reader refuses the rest), so actor is set where it's used.
 		const std::function<std::optional<bool>()> tests[] = {
-			[&] { return flag(a_conditions.alive, [&] { return !a_actor->IsDead(); }); },
-			[&] { return flag(a_conditions.teammate, [&] { return a_actor->IsPlayerTeammate(); }); },
-			[&] { return flag(a_conditions.essential, [&] { return a_actor->IsEssential(); }); },
-			[&] { return flag(a_conditions.protectedFlag, [&] { return a_actor->IsProtected(); }); },
+			[&] { return a_conditions.types ? std::optional<bool>((Rules::TypeOf(a_ref) & a_conditions.types) != 0) : std::nullopt; },
+			[&] { return anyOf(a_conditions.bases, [&](RE::TESBoundObject* a_base) { return base == a_base; }); },
+			[&] { return flag(a_conditions.read, [&] { return book && book->IsRead(); }); },
+			[&] { return flag(a_conditions.spellTome, [&] { return book && book->TeachesSpell(); }); },
+			[&] { return flag(a_conditions.takeable, [&] { return Takeable(a_ref); }); },
+			[&] { return flag(a_conditions.locked, [&] { return a_ref->IsLocked(); }); },
+			[&] { return flag(a_conditions.requiresKey, [&] { return a_ref->IsLocked() && a_ref->GetLockLevel() == RE::LOCK_LEVEL::kRequiresKey; }); },
+			[&] { return flag(a_conditions.playerSneaking, [&] { return RE::PlayerCharacter::GetSingleton()->IsSneaking(); }); },
+			[&] { return flag(a_conditions.alive, [&] { return !actor->IsDead(); }); },
+			[&] { return flag(a_conditions.teammate, [&] { return actor->IsPlayerTeammate(); }); },
+			[&] { return flag(a_conditions.essential, [&] { return actor->IsEssential(); }); },
+			[&] { return flag(a_conditions.protectedFlag, [&] { return actor->IsProtected(); }); },
 			[&] { return flag(a_conditions.bleedingOut, [&] { return state && state->IsBleedingOut(); }); },
 			[&] { return flag(a_conditions.unconscious, [&] { return state && state->IsUnconscious(); }); },
 			[&] { return flag(a_conditions.sitting, [&] { return state && state->IsSitting(); }); },
 			[&] { return flag(a_conditions.sleeping, [&] { return state && state->GetSitSleepState() == RE::SIT_SLEEP_STATE::kIsSleeping; }); },
-			[&] { return flag(a_conditions.inCombat, [&] { return a_actor->IsInCombat(); }); },
-			[&] { return anyOf(a_conditions.npcs, [&](RE::TESNPC* a_npc) { return a_actor->GetActorBase() == a_npc || a_actor->GetTemplateBase() == a_npc; }); },
-			[&] { return anyOf(a_conditions.races, [&](RE::TESRace* a_race) { return a_actor->GetRace() == a_race; }); },
+			[&] { return flag(a_conditions.inCombat, [&] { return actor->IsInCombat(); }); },
+			[&] { return anyOf(a_conditions.npcs, [&](RE::TESNPC* a_npc) { return actor->GetActorBase() == a_npc || actor->GetTemplateBase() == a_npc; }); },
+			[&] { return anyOf(a_conditions.races, [&](RE::TESRace* a_race) { return actor->GetRace() == a_race; }); },
 			[&] { return anyOf(a_conditions.keywords, [&](RE::BGSKeyword* a_keyword) {
-					  const auto race = a_actor->GetRace();
-					  return a_actor->HasKeyword(a_keyword) || (race && race->HasKeyword(a_keyword));
+					  const auto race = actor ? actor->GetRace() : nullptr;
+					  return a_ref->HasKeyword(a_keyword) || (race && race->HasKeyword(a_keyword));
 				  }); },
 			[&] { return anyOf(a_conditions.factions, [&](const Rules::FactionCondition& a_faction) {
-					  return a_actor->IsInFaction(a_faction.faction) &&
-				             (!a_faction.minRank || a_actor->GetFactionRank(a_faction.faction, a_actor->IsPlayerRef()) >= *a_faction.minRank);
+					  return actor->IsInFaction(a_faction.faction) &&
+				             (!a_faction.minRank || actor->GetFactionRank(a_faction.faction, actor->IsPlayerRef()) >= *a_faction.minRank);
 				  }); },
+			[&] { return flag(a_conditions.playerHasKey, [&] { return PlayerHasKey(a_ref); }); },
+			[&] { return anyOf(a_conditions.destinationKeywords, [&](RE::BGSKeyword* a_keyword) {
+					  const auto location = DestinationOf(a_ref);
+					  return location && location->HasKeyword(a_keyword);
+				  }); },
+			[&] { return flag(a_conditions.owned, [&] { return a_ref->IsCrimeToActivate(); }); },
 			[&] { return anyOf(a_conditions.items, [&](RE::TESBoundObject* a_item) { return a_inventory.Carries(a_item); }); },
-			[&] { return anyOf(a_conditions.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(a_actor, a_topic); }); },
+			[&] { return anyOf(a_conditions.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(actor, a_topic); }); },
 		};
 
 		for (const auto& test : tests) {
@@ -413,6 +609,12 @@ namespace
 		}
 		return a_all;
 	}
+
+	// The rule is for this kind of reference: NPC rules for actors, object rules for everything else
+	bool ForKind(const Rules::Rule& a_rule, bool a_isActor)
+	{
+		return (a_rule.target == Rules::Target::kNPC) == a_isActor;
+	}
 }
 
 namespace Rules
@@ -423,7 +625,9 @@ namespace Rules
 			std::string translated;
 			if (!label.starts_with('$')) {
 				text = label;
-			} else if (SKSE::Translation::Translate(label, translated)) {
+			} else if (const auto found = translations.find(label); found != translations.end()) {
+				text = found->second;
+			} else if (SKSE::Translation::Translate(label, translated)) {  // a key from a file SKSE loaded itself
 				text = std::move(translated);
 			} else {
 				logger::warn("No translation for label \"{}\" (Interface/Translations), shown as is", label);
@@ -459,6 +663,7 @@ namespace Rules
 			LoadFile(file);
 		}
 		std::ranges::stable_sort(rules, std::ranges::greater{}, &Rule::priority);
+		objectRules = std::ranges::any_of(rules, [](const Rule& r) { return r.target == Target::kObject; });
 
 		// Rules from different files sharing a priority: fine, but say who wins a tie
 		for (auto first = rules.begin(); first != rules.end();) {
@@ -475,25 +680,77 @@ namespace Rules
 		logger::info("{} rule(s) active", rules.size());
 	}
 
-	const Rule* Match(RE::Actor* a_actor)
+	const Rule* Match(RE::TESObjectREFR* a_ref)
 	{
-		if (!a_actor || rules.empty()) {
+		if (!a_ref || rules.empty()) {
 			return nullptr;
 		}
-		Inventory inventory(a_actor);
+		const auto actor = a_ref->As<RE::Actor>();
+		if (!actor && !objectRules) {
+			return nullptr;
+		}
+		Inventory inventory(actor);
 		for (const auto& rule : rules) {
-			if (rule.enabled.value && Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+			if (rule.enabled.value && ForKind(rule, actor != nullptr) && Check(rule.requirements, a_ref, inventory, true) &&
+				!Check(rule.exclusions, a_ref, inventory, false)) {
 				return &rule;
 			}
 		}
 		return nullptr;
 	}
 
-	std::vector<const Action*> Alternates(const Rule& a_rule, RE::Actor* a_actor)
+	bool HasObjectRules()
 	{
+		return objectRules;
+	}
+
+	std::uint32_t TypeOf(RE::TESObjectREFR* a_ref)
+	{
+		const auto base = a_ref ? a_ref->GetBaseObject() : nullptr;
+		if (!base) {
+			return 0;
+		}
+		switch (base->GetFormType()) {
+		case RE::FormType::Book:
+			return kBook;
+		case RE::FormType::Weapon:
+			return kWeapon;
+		case RE::FormType::Armor:
+			return kArmor;
+		case RE::FormType::AlchemyItem:
+			{
+				const auto item = base->As<RE::AlchemyItem>();
+				return item->IsPoison() ? kPoison : item->IsFood() ? kFood : kPotion;
+			}
+		case RE::FormType::Ingredient:
+			return kIngredient;
+		case RE::FormType::Scroll:
+			return kScroll;
+		case RE::FormType::Light:
+			return base->As<RE::TESObjectLIGH>()->CanBeCarried() ? kTorch : 0;
+		case RE::FormType::Ammo:
+			return kAmmo;
+		case RE::FormType::Misc:
+			return kMisc;
+		case RE::FormType::KeyMaster:
+			return kKey;
+		case RE::FormType::SoulGem:
+			return kSoulGem;
+		case RE::FormType::Door:
+			return kDoor;
+		case RE::FormType::Container:
+			return kContainer;
+		default:
+			return 0;
+		}
+	}
+
+	std::vector<const Action*> Alternates(const Rule& a_rule, RE::TESObjectREFR* a_ref)
+	{
+		const auto                 actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
 		std::vector<const Action*> available;
 		for (const auto& action : a_rule.alternates) {
-			if (action.topics.empty() || std::ranges::any_of(action.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(a_actor, a_topic); })) {
+			if (action.topics.empty() || std::ranges::any_of(action.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(actor, a_topic); })) {
 				available.push_back(&action);
 			}
 		}
@@ -515,25 +772,26 @@ namespace Rules
 		return nullptr;
 	}
 
-	void ReportConflicts(RE::Actor* a_actor, const Rule* a_winner)
+	void ReportConflicts(RE::TESObjectREFR* a_ref, const Rule* a_winner)
 	{
 		static std::set<std::pair<const Rule*, const Rule*>> reported;
 
-		Inventory inventory(a_actor);
+		const auto actor = a_ref->As<RE::Actor>();
+		Inventory  inventory(actor);
 		bool      after = false;
 		for (const auto& rule : rules) {
 			if (&rule == a_winner) {
 				after = true;
 				continue;
 			}
-			if (!after || !rule.enabled.value || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
+			if (!after || !rule.enabled.value || !ForKind(rule, actor != nullptr) || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
 				continue;
 			}
-			if (Check(rule.requirements, a_actor, inventory, true) && !Check(rule.exclusions, a_actor, inventory, false)) {
+			if (Check(rule.requirements, a_ref, inventory, true) && !Check(rule.exclusions, a_ref, inventory, false)) {
 				reported.insert({ a_winner, &rule });
-				const char* name = a_actor->GetDisplayFullName();
+				const char* name = a_ref->GetDisplayFullName();
 				logger::info("Conflict on {} ({:08X}): {} / {} (priority {}) is used; {} / {} (priority {}) also matches and is ignored",
-					name ? name : "?", a_actor->GetFormID(), a_winner->file, a_winner->id, a_winner->priority, rule.file, rule.id, rule.priority);
+					name ? name : "?", a_ref->GetFormID(), a_winner->file, a_winner->id, a_winner->priority, rule.file, rule.id, rule.priority);
 			}
 		}
 	}

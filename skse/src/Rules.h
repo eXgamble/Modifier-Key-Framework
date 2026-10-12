@@ -26,17 +26,59 @@
 // menu that topic opened (barter, training, ...) closes. A modifier action with topics shows only while the NPC offers
 // one of them; the ones left move up a slot.
 //
+// Rule format 5: "target": "object" for things in the world (books, items, doors, containers), with object conditions
+// ("type", "base", "read", "locked", ...), and actions that do one of the game's own things ("do": "take", "equip",
+// "equipAndDraw", "use", "activate") instead of sending an event.
+//
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
 // match, the highest priority wins.
 namespace Rules
 {
+	enum class Target
+	{
+		kNPC,
+		kObject
+	};
+
+	// "do": one of the game's own actions, run by the framework
+	enum class Do
+	{
+		kNone,
+		kActivate,      // the vanilla activation (Talk, Read, Open, Unlock, ...)
+		kTake,          // pick it up (a crime where the game says so)
+		kEquip,         // pick it up and equip it
+		kEquipAndDraw,  // pick it up, equip it, draw it
+		kUse            // pick it up and use it: drink, eat, apply a poison (or equip what can't be used)
+	};
+
+	// "type" of an object target (bit flags)
+	enum ObjectType : std::uint32_t
+	{
+		kBook = 1 << 0,
+		kWeapon = 1 << 1,
+		kArmor = 1 << 2,
+		kPotion = 1 << 3,
+		kFood = 1 << 4,
+		kPoison = 1 << 5,
+		kIngredient = 1 << 6,
+		kScroll = 1 << 7,
+		kTorch = 1 << 8,
+		kAmmo = 1 << 9,
+		kMisc = 1 << 10,
+		kKey = 1 << 11,
+		kSoulGem = 1 << 12,
+		kDoor = 1 << 13,
+		kContainer = 1 << 14
+	};
+
 	struct Action
 	{
 		std::string label;  // plain text, or "$Key" from Interface/Translations
 		std::string event;
 		std::vector<RE::TESTopic*> topics;  // format 4: pick one of these in dialogue instead of an event
 		bool                       endDialogue = false;
+		Do                         act = Do::kNone;  // format 5: a game action instead of an event
 
 		// The label to show: a "$Key" translated (on first use, then cached), plain text as is
 		const std::string& Text() const;
@@ -69,6 +111,19 @@ namespace Rules
 		std::optional<bool>              sitting;
 		std::optional<bool>              sleeping;
 		std::optional<bool>              inCombat;
+		// object targets (format 5)
+		std::uint32_t                    types = 0;  // ObjectType bits, 0 = any
+		std::vector<RE::TESBoundObject*> bases;
+		std::vector<RE::BGSKeyword*>     destinationKeywords;  // a door's destination location
+		std::optional<bool>              read;
+		std::optional<bool>              spellTome;
+		std::optional<bool>              locked;
+		std::optional<bool>              requiresKey;
+		std::optional<bool>              playerHasKey;
+		std::optional<bool>              owned;  // taking or using it is a crime
+		std::optional<bool>              takeable;  // can be picked up (not a book that can't be taken, a fixed light, ...)
+		// either target
+		std::optional<bool>              playerSneaking;
 	};
 
 	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)
@@ -90,6 +145,7 @@ namespace Rules
 	{
 		std::string           file;  // for log messages
 		std::string           id;
+		Target                target = Target::kNPC;
 		Conditions            requirements;
 		Conditions            exclusions;
 		std::int32_t          priority = 0;
@@ -105,14 +161,21 @@ namespace Rules
 	// are case-insensitive: the game may hand over a differently cased copy), or nullptr
 	Rule* Find(std::string_view a_file, std::string_view a_id);
 
-	// The highest-priority rule the actor matches, or nullptr.
-	const Rule* Match(RE::Actor* a_actor);
+	// The highest-priority rule the reference matches (an NPC rule for an actor, an object rule for anything else), or
+	// nullptr.
+	const Rule* Match(RE::TESObjectREFR* a_ref);
 
-	// The rule's modifier actions the actor offers right now, in slot order (an action with topics only while the actor
+	// Is there any rule for objects (a quick way out for the object hooks)
+	bool HasObjectRules();
+
+	// The rule's modifier actions the target offers right now, in slot order (an action with topics only while the actor
 	// offers one of them).
-	std::vector<const Action*> Alternates(const Rule& a_rule, RE::Actor* a_actor);
+	std::vector<const Action*> Alternates(const Rule& a_rule, RE::TESObjectREFR* a_ref);
+
+	// The object type bits of a reference's base (one bit, 0 for anything else)
+	std::uint32_t TypeOf(RE::TESObjectREFR* a_ref);
 
 	// Logs (once per pair) each rule from another file that also matches the actor but lost to
 	// a_winner. Called on activation only, not for every prompt update.
-	void ReportConflicts(RE::Actor* a_actor, const Rule* a_winner);
+	void ReportConflicts(RE::TESObjectREFR* a_ref, const Rule* a_winner);
 }

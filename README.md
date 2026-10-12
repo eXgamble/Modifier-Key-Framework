@@ -1,7 +1,8 @@
 # Modifier Key Framework
 
 An SKSE framework for Skyrim Anniversary Edition (1.6.x and 1.7.x) that lets mods add their own
-activation actions to NPCs and creatures, living or dead (bodies too), declared in simple JSON files, with one shared **modifier key** for a
+activation actions to NPCs and creatures, living or dead (bodies too), and (1.4.0) to books, items,
+doors and containers, declared in simple JSON files, with one shared **modifier key** for a
 second action. An alternative to perk-based activation and Dynamic Activation Key: no plugin, no
 perk, no script needed just to show a prompt.
 
@@ -58,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -67,14 +68,15 @@ Each rule:
 | Key | Meaning |
 |---|---|
 | `id` | the rule's name: in the log, sent with the event, used by `SetRuleEnabled` |
-| `target` | `"npc"` (only NPCs for now) |
+| `target` | `"npc"` (the default), or `"object"` (format `5`): books, items, doors and containers in the world (see [Objects](#objects)) |
 | `requires` | optional: conditions that must **all** hold (see [Conditions](#conditions)) |
 | `not` | optional: conditions of which **none** may hold (same keys as `requires`) |
 | `primary` | `{ "label": ..., "event": ... }`: the label shown, and the SKSE mod event sent on activation. Without an `event`, only the label changes and activation stays vanilla. Without a `label`, the prompt keeps the game's own text (`Search` on a dead body, `Talk`, in the player's language). Format `2`: `primary` itself is optional, `"primary": {}` or leaving it out keeps the activation fully vanilla |
 | `alternate` | optional action used while the modifier key is held; needs a `label`. Format `3`: a list of up to 3 actions, in order of importance (see [More than one modifier action](#more-than-one-modifier-action)) |
 
 An action can pick a dialogue topic instead of sending an event (format `4`, see
-[Dialogue topics](#dialogue-topics)).
+[Dialogue topics](#dialogue-topics)), or do one of the game's own things (format `5`, see
+[Objects](#objects)).
 | `priority` | when several rules match, the highest wins (default 0) |
 | `enabled` | optional, default `true`; `false` = off until a script turns it on (see [Papyrus API](#papyrus-api)) |
 
@@ -202,6 +204,58 @@ The X and Y controls do their normal job (drawing the weapon, jumping) everywher
 only takes them while the modifier key is held over a target whose rule has that many actions. One
 rule wins per target and brings all its actions; actions from different mods are never mixed.
 
+### Objects
+
+Format `5` (framework 1.4.0+). With `"target": "object"` a rule is for things in the world instead of
+NPCs: books, weapons, armor, potions, food, poisons, ingredients, scrolls, torches, ammo, misc items,
+keys, soul gems, doors and containers. Object rules use their own conditions:
+
+| Condition | Holds when the object… |
+|---|---|
+| `type` | is one of these kinds: `book`, `weapon`, `armor`, `potion`, `food`, `poison`, `ingredient`, `scroll`, `torch`, `ammo`, `misc`, `key`, `soulGem`, `door`, `container` (one or a list) |
+| `base` | is one of these base objects (`"Plugin.esp\|0xID"`) |
+| `keyword` | has the keyword |
+| `read` | is a book the player has read |
+| `spellTome` | is a spell tome |
+| `takeable` | can be picked up (not a book flagged can't-take, not a door or container) |
+| `owned` | taking it is a crime |
+| `locked` | is locked |
+| `requiresKey` | is locked and can only be opened with its key |
+| `playerHasKey` | is locked and the player carries its key |
+| `destinationKeyword` | is a door whose other side is in a location with this keyword (e.g. `LocTypeHouse`) |
+| `playerSneaking` | the player is sneaking (NPC rules can use this one too) |
+
+Instead of an `event`, an action can `"do"` one of the game's own things:
+
+| `do` | What happens | Label if none is given |
+|---|---|---|
+| `activate` | the vanilla activation (Read, Open, Unlock, Talk, ...) | the game's own |
+| `take` | picked up the game's way (a crime where the game says so) | the game's `Take` / red `Steal` |
+| `equip` | picked up and equipped (ammo: the whole stack) | needs a label |
+| `equipAndDraw` | picked up, equipped and drawn | needs a label |
+| `use` | picked up and used: drunk, eaten, applied (things that can't be used are equipped) | needs a label |
+
+When taking would be a crime, the labels of `take`, `equip`, `equipAndDraw` and `use` show red, like
+the game's own `Steal`. NPC rules can only `"do": "activate"`.
+
+```jsonc
+{
+  "version": 5,
+  "rules": [{
+    "id": "weapons",
+    "target": "object",
+    "requires": { "type": "weapon" },
+    "primary": {},                                              // Take / Steal, as vanilla
+    "alternate": [
+      { "label": "Equip",          "do": "equip" },             // Activate
+      { "label": "Equip and Draw", "do": "equipAndDraw" }       // X
+    ]
+  }]
+}
+```
+
+Events work on objects too: `akTarget` is the object's reference.
+
 ### Dialogue topics
 
 Format `4` (framework 1.3.0+). An action can name dialogue topics (`DIAL` records) instead of an
@@ -229,7 +283,7 @@ opened closes, instead of going back to the topic list.
   sends stays its place in the list, whichever button it lands on.
 - The `topic` condition answers the same question for the whole rule.
 - MKF - Merchants and Trainers (its own mod) is a
-  complete example.
+  complete example; MKF - Read Or Take and MKF - Use Or Take are examples for objects.
 
 ### Translated labels
 
@@ -301,7 +355,7 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 | Player sees a second action | no | yes: the modifier key's button on the prompt |
 | Two mods on the same NPC | perk entry priority, silent | priority, deterministic, logged |
 | Conditions | the Creation Kit's full condition set | the list above; anything else through a keyword, faction or item |
-| Targets | anything a perk entry point can target | NPCs (other objects: planned) |
+| Targets | anything a perk entry point can target | NPCs and creatures; books, items, doors and containers (1.4.0) |
 
 ## Settings
 

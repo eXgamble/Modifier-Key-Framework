@@ -386,8 +386,10 @@ namespace
 		const bool wasMoved = moved.IsBool() && moved.GetBool();
 		if (!wasMoved) {
 			SetIn(a_hud, "mkfButtonBaseY", RE::GFxValue(Number(button, "_y")));
+			SetIn(a_hud, "mkfTextBaseY", RE::GFxValue(Number(text, "_y")));
 		}
 		const double baseY = [&] { RE::GFxValue y; GetIn(a_hud, "mkfButtonBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(button, "_y"); }();
+		const double textBaseY = [&] { RE::GFxValue y; GetIn(a_hud, "mkfTextBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(text, "_y"); }();
 
 		const auto active = a_activate && a_name.IsString() ? ActivePrompt() : Prompt{};
 		const auto& labels = active.labels;
@@ -395,6 +397,7 @@ namespace
 		if (labels.empty()) {
 			if (wasMoved) {
 				SetIn(button, "_y", RE::GFxValue(baseY));
+				SetIn(text, "_y", RE::GFxValue(textBaseY));
 				SetIn(a_hud, "mkfButtonMoved", RE::GFxValue(false));
 			}
 			if (active.marker) {
@@ -416,9 +419,16 @@ namespace
 		std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
 		CallIn(text, "SetText", nullptr, setArgs.data(), setArgs.size());
 
+		// the stack grows upward: the Activate line and the name stay where the HUD put them (items show their
+		// weight and value right below the name)
 		const auto extra = static_cast<std::uint32_t>(labels.size());
+		double     above = 0.0;
+		for (std::uint32_t line = 0; line < extra; ++line) {
+			above += GetLine(text, line).height;
+		}
+		SetIn(text, "_y", RE::GFxValue(textBaseY - above));
 		const std::string activateArt = ActivateArt(button);
-		double top = 0.0;
+		double top = -above;
 		for (std::uint32_t line = 0; line <= extra; ++line) {
 			const auto metrics = GetLine(text, line);
 			const double x = buttonX + (metrics.x - firstLineX);

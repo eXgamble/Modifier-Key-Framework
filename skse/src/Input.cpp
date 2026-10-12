@@ -1,5 +1,6 @@
 #include "Input.h"
 
+#include "Rules.h"
 #include "Settings.h"
 
 namespace
@@ -8,12 +9,12 @@ namespace
 	std::atomic<bool> gamepadHeld{ false };
 
 	// Rebuild the prompt of whatever the player is looking at, so it switches the moment the key
-	// goes down or up (only for actors: the framework handles NPCs only).
+	// goes down or up (NPCs, and objects when some rule is for objects).
 	void RefreshPrompt()
 	{
 		const auto pick = RE::CrosshairPickData::GetSingleton();
 		const auto target = pick ? pick->GetActiveTarget().get() : nullptr;
-		if (target && target->Is(RE::FormType::ActorCharacter)) {
+		if (target && (target->Is(RE::FormType::ActorCharacter) || Rules::HasObjectRules())) {
 			if (const auto player = RE::PlayerCharacter::GetSingleton()) {
 				player->UpdateCrosshairs();
 			}
