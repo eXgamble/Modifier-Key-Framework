@@ -244,7 +244,10 @@ An action can also say what the prompt's last line shows while it's the action o
 Acquaintance, Rival, Foe, Enemy, Archnemesis) where the game shows a lock's level. That's the NPC itself; for a
 door, whoever owns the place it leads to (for a household, the friendliest grown-up); for anything else, its owner.
 Nobody (no owner, or they're all dead): the game's own line stays. The rank names can be translated in
-`Interface/Translations/ModifierKeyFramework_<LANGUAGE>.txt`.
+`Interface/Translations/ModifierKeyFramework_<LANGUAGE>.txt`. Cost: on an NPC that's a single look-up; for a door
+or an object the framework finds the people behind it by going through every actor in the game, about 1 ms for a
+household and 3 ms the first time after a load (measured with ~3,300 actors on a fast PC; the result is then kept
+10 s per owner), so weigh it on big lists and slower PCs.
 
 The nine rank names say more than most mods do with them, so a rule can use its own words instead: `"infoLabels"`
 lists a word per rank range, and the first entry whose `fromRank` the rank reaches is shown (4 Lover, 3 Ally,
