@@ -33,6 +33,8 @@
 // (a door's lock level, ...): the game's rank names, or the rule's own words per rank ("infoLabels": [{ "fromRank": 1,
 // "label": "Friend" }, { "label": "Unwelcome" }]: the first entry whose fromRank the rank reaches).
 //
+// Rule format 6: "info": "none" shows nothing below the name line instead (a Knock without the lock level).
+//
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
 // match, the highest priority wins.
@@ -55,10 +57,11 @@ namespace Rules
 		kUse            // pick it up and use it: drink, eat, apply a poison (or equip what can't be used)
 	};
 
-	// "info": what the prompt's last line shows instead of the game's own (a lock level, ...)
+	// "info": what the prompt shows below the name line instead of the game's own lines (a lock level, ...)
 	enum class Info
 	{
-		kNone,
+		kGame,         // no "info": the game's own lines stay
+		kNothing,      // "none" (format 6): nothing below the name
 		kRelationship  // how the NPC, or the people living behind a door, or an object's owner, feel about the player
 	};
 
@@ -96,7 +99,7 @@ namespace Rules
 		std::vector<RE::TESTopic*> topics;  // format 4: pick one of these in dialogue instead of an event
 		bool                       endDialogue = false;
 		Do                         act = Do::kNone;  // format 5: a game action instead of an event
-		Info                       info = Info::kNone;  // format 5
+		Info                       info = Info::kGame;  // format 5
 		std::vector<RankLabel>     infoLabels;          // highest fromRank first; empty = the game's rank names
 
 		// The label to show: a "$Key" translated (on first use, then cached), plain text as is

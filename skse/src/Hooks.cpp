@@ -113,9 +113,11 @@ namespace
 			const char* name = a_target->GetDisplayFullName();
 			rest = std::format("\n{}", name ? name : "");
 		}
-		// "info": the name line stays, the game's lines below it (a lock level, ...) make way. The info line gets the
-		// game's diamond, like its own lock level line.
-		if (action.info == Rules::Info::kRelationship) {
+		// "info": the name line stays, the game's lines below it (a lock level, ...) make way: for nothing, or for an info
+		// line with the game's diamond, like its own lock level line.
+		if (action.info == Rules::Info::kNothing) {
+			rest = rest.substr(0, rest.find('\n', 1));
+		} else if (action.info == Rules::Info::kRelationship) {
 			const auto rank = Relationship::Of(a_target);
 			// the rule's own word for the rank (the first entry the rank reaches), or the game's rank name
 			std::optional<std::string> word;

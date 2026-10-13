@@ -16,7 +16,8 @@ namespace
 	// 3 (1.2.0): "alternate" can be a list of up to 3 actions (buttons: Activate, then slots 2 and 3).
 	// 4 (1.3.0): the "topic" condition, and actions that pick a dialogue topic ("topic", "endDialogue").
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
-	constexpr std::int32_t RULE_FORMAT_VERSION = 5;
+	// 6 (1.5.0): "info": "none" (nothing below the name line).
+	constexpr std::int32_t RULE_FORMAT_VERSION = 6;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
@@ -296,10 +297,16 @@ namespace
 			if (currentVersion < 5) {
 				throw RuleError{ std::format("\"{}\": \"info\" needs \"version\": 5", a_name) };
 			}
-			if (a_json["info"] != "relationship") {
-				throw RuleError{ std::format("\"{}\": \"info\" is \"relationship\"", a_name) };
+			if (a_json["info"] == "relationship") {
+				action.info = Rules::Info::kRelationship;
+			} else if (a_json["info"] == "none") {
+				if (currentVersion < 6) {
+					throw RuleError{ std::format("\"{}\": \"info\": \"none\" needs \"version\": 6", a_name) };
+				}
+				action.info = Rules::Info::kNothing;
+			} else {
+				throw RuleError{ std::format("\"{}\": \"info\" is \"relationship\" or \"none\"", a_name) };
 			}
-			action.info = Rules::Info::kRelationship;
 		}
 		if (a_json.contains("infoLabels")) {
 			if (action.info != Rules::Info::kRelationship) {

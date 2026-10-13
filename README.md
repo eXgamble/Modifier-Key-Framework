@@ -59,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -261,6 +261,9 @@ covers every rank). A rank below every entry keeps the game's own line.
   ]
 }
 ```
+
+Format `6` (framework 1.5.0+): `"info": "none"` shows nothing below the name instead, e.g. a Knock without the
+lock's level: `{ "label": "Knock", "event": "MySimplyKnock_Knock", "info": "none" }`.
 
 ```jsonc
 {
