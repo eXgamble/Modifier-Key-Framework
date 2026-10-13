@@ -468,6 +468,7 @@ namespace
 						throw RuleError{ "\"enabled\" must be true or false" };
 					}
 					rule.enabled.value = entry["enabled"].get<bool>();
+					rule.enabledInFile = rule.enabled.value;
 				}
 				if (const auto target = entry.value("target", "npc"); target == "object") {
 					if (fileVersion < 5) {
@@ -752,6 +753,19 @@ namespace Rules
 			}
 		}
 		return nullptr;
+	}
+
+	void ResetEnabled()
+	{
+		std::size_t changed = 0;
+		for (auto& rule : rules) {
+			if (rule.enabled.value.exchange(rule.enabledInFile) != rule.enabledInFile) {
+				++changed;
+			}
+		}
+		if (changed) {
+			logger::info("{} rule switch(es) back to their file's value for the new game or load", changed);
+		}
 	}
 
 	bool HasObjectRules()

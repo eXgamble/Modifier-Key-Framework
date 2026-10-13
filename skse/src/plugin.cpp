@@ -40,6 +40,7 @@ namespace
 			Dialogue::Install();
 		} else if (a_msg->type == SKSE::MessagingInterface::kPreLoadGame || a_msg->type == SKSE::MessagingInterface::kNewGame) {
 			Relationship::Reset();
+			Rules::ResetEnabled();
 		}
 	}
 }

@@ -4,10 +4,23 @@
 
 namespace
 {
-	// Every actor reference in the game's form map (the persistent ones: anyone with a home), found once per game
-	std::vector<RE::FormID> actors;
-	bool                    scanned = false;
-	std::mutex              actorsLock;
+	// Every actor reference in the game's form map (the persistent ones: anyone with a home), found once per game, and
+	// each base's first reference (an NPC owner's reference without walking them all)
+	std::vector<RE::FormID>                     actors;
+	std::unordered_map<RE::TESNPC*, RE::FormID> refOfBase;
+	bool                                        scanned = false;
+	std::mutex                                  actorsLock;
+
+	// An owner's rank, kept a while: a household walks every actor in the game (about 1 ms with 3300 of them, measured
+	// 2026-10-12), and the prompt is built again on every press of the modifier and about once a second.
+	struct CachedRank
+	{
+		std::optional<std::int32_t>           rank;
+		std::chrono::steady_clock::time_point at;
+	};
+	std::unordered_map<RE::FormID, CachedRank> ownerRanks;
+	std::mutex                                 ownerLock;
+	constexpr auto                             kOwnerFresh = std::chrono::seconds(10);
 
 	std::vector<RE::FormID> Actors()
 	{
@@ -20,6 +33,9 @@ namespace
 				for (const auto& [id, form] : *forms) {
 					if (form && form->Is(RE::FormType::ActorCharacter)) {
 						actors.push_back(id);
+						if (const auto base = static_cast<RE::Actor*>(form)->GetActorBase()) {
+							refOfBase.try_emplace(base, id);
+						}
 					}
 				}
 			}
@@ -59,15 +75,20 @@ namespace
 		return cell ? cell->GetOwner() : nullptr;
 	}
 
-	std::optional<std::int32_t> OwnerRank(RE::TESForm* a_owner)
+	std::optional<std::int32_t> ComputeOwnerRank(RE::TESForm* a_owner)
 	{
 		if (const auto npc = a_owner ? a_owner->As<RE::TESNPC>() : nullptr) {
 			// the owner's reference, to see they're alive; none found (never loaded): assume so
-			for (const auto id : Actors()) {
-				const auto actor = RE::TESForm::LookupByID<RE::Actor>(id);
-				if (actor && actor->GetActorBase() == npc) {
-					return Lives(actor) ? std::optional(RankOf(npc)) : std::nullopt;
+			Actors();
+			RE::FormID id = 0;
+			{
+				std::scoped_lock lock{ actorsLock };
+				if (const auto it = refOfBase.find(npc); it != refOfBase.end()) {
+					id = it->second;
 				}
+			}
+			if (const auto actor = id ? RE::TESForm::LookupByID<RE::Actor>(id) : nullptr) {
+				return Lives(actor) ? std::optional(RankOf(npc)) : std::nullopt;
 			}
 			return RankOf(npc);
 		}
@@ -88,6 +109,24 @@ namespace
 			best = std::max(best.value_or(-4), RankOf(actor->GetActorBase()));
 		}
 		return adults ? adults : children;
+	}
+
+	std::optional<std::int32_t> OwnerRank(RE::TESForm* a_owner)
+	{
+		if (!a_owner) {
+			return std::nullopt;
+		}
+		const auto now = std::chrono::steady_clock::now();
+		{
+			std::scoped_lock lock{ ownerLock };
+			if (const auto it = ownerRanks.find(a_owner->GetFormID()); it != ownerRanks.end() && now - it->second.at < kOwnerFresh) {
+				return it->second.rank;
+			}
+		}
+		const auto rank = ComputeOwnerRank(a_owner);
+		std::scoped_lock lock{ ownerLock };
+		ownerRanks[a_owner->GetFormID()] = { rank, now };
+		return rank;
 	}
 }
 
@@ -123,8 +162,13 @@ namespace Relationship
 
 	void Reset()
 	{
-		std::scoped_lock lock{ actorsLock };
-		actors.clear();
-		scanned = false;
+		{
+			std::scoped_lock lock{ actorsLock };
+			actors.clear();
+			refOfBase.clear();
+			scanned = false;
+		}
+		std::scoped_lock lock{ ownerLock };
+		ownerRanks.clear();
 	}
 }

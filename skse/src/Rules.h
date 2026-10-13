@@ -172,6 +172,7 @@ namespace Rules
 		Action                primary;
 		std::vector<Action>   alternates;  // modifier actions in button order: Activate, slot 2, slot 3 (0-3 of them)
 		EnabledFlag           enabled;  // "enabled" in JSON (default true), then Papyrus
+		bool                  enabledInFile = true;  // "enabled" in JSON: what each load goes back to
 	};
 
 	// A "$Key" from the framework's own or a rule file's translation file, or a_fallback
@@ -200,6 +201,10 @@ namespace Rules
 
 	// The object type bits of a reference's base (one bit, 0 for anything else)
 	std::uint32_t TypeOf(RE::TESObjectREFR* a_ref);
+
+	// kPreLoadGame / kNewGame: every rule back to its "enabled" value from its file. Papyrus switches aren't saved (the
+	// documented contract: mods set them again on every load), so one save's switch must not carry into the next.
+	void ResetEnabled();
 
 	// Logs (once per pair) each rule from another file that also matches the actor but lost to
 	// a_winner. Called on activation only, not for every prompt update.

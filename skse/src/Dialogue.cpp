@@ -106,7 +106,7 @@ namespace
 			const auto& name = a_event->menuName;
 			if (name == RE::DialogueMenu::MENU_NAME) {
 				if (a_event->opening) {
-					SKSE::GetTaskInterface()->AddTask(FindCallback);
+					SKSE::GetTaskInterface()->AddUITask(FindCallback);  // the menu's own callbacks: on the UI's turn
 					bool want;
 					{
 						std::lock_guard guard(lock);
@@ -116,10 +116,11 @@ namespace
 						want = pending && !pending->chosen;
 					}
 					if (want) {
+						// skse-lint: ok one-shot: at most 40 tries 0.1 s apart after a topic action opens a conversation
 						std::thread([] {
 							for (int i = 0; i < 40; ++i) {
-								std::this_thread::sleep_for(std::chrono::milliseconds(100));
-								SKSE::GetTaskInterface()->AddTask(TryChoose);
+								std::this_thread::sleep_for(std::chrono::milliseconds(100));  // skse-lint: ok the bounded retry above
+								SKSE::GetTaskInterface()->AddUITask(TryChoose);  // clicks the menu's topic: on the UI's turn
 							}
 						}).detach();
 					}
@@ -159,7 +160,10 @@ namespace Dialogue
 	bool Offers(RE::Actor* a_actor, RE::TESTopic* a_topic)
 	{
 		const auto player = RE::PlayerCharacter::GetSingleton();
-		if (!a_actor || !a_topic || (a_topic->ownerQuest && !a_topic->ownerQuest->IsRunning())) {
+		// running the way Papyrus means it: CommonLib's IsRunning() alone is only "not stopping", true for a quest that
+		// never started
+		const auto quest = a_topic ? a_topic->ownerQuest : nullptr;
+		if (!a_actor || !a_topic || (quest && !(quest->IsEnabled() && quest->IsRunning()))) {
 			return false;
 		}
 		for (std::uint32_t i = 0; i < a_topic->numTopicInfos; ++i) {

@@ -341,7 +341,8 @@ Script `ModifierKeyFramework` (source in `Scripts/Source/ModifierKeyFramework.ps
 - `asFile` is the rule file's name with or without `.json`; file and rule id are case-insensitive.
 - A rule starts as its `"enabled"` value in the rule file (default `true`); ship it `false` to turn
   it on from a script.
-- The switch is **not saved**: set it again on every game load, typically from your MCM setting in
+- The switch is **not saved**: every new game and every load starts from the rule file's `"enabled"` value, so set
+  it again on every game load, typically from your MCM setting in
   `OnPlayerLoadGame`, together with your `RegisterForModEvent` calls. A removed or updated mod
   never leaves stale state behind.
 - The prompt updates at once when the NPC under the crosshair is affected.

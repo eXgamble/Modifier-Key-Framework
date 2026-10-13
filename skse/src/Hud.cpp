@@ -30,6 +30,7 @@ namespace
 	Prompt            prompt;  // written by the prompt hook, read by the HUD
 	std::mutex        promptLock;
 	std::atomic<bool> installed{ false };
+	std::atomic<bool> installTried{ false };  // the open HUD was looked at: one without SetCrosshairTarget isn't asked again
 
 	// The prompt's extras, if they belong to what the crosshair is on now
 	Prompt ActivePrompt()
@@ -489,8 +490,9 @@ namespace
 		const auto movie = menu ? menu->uiMovie.get() : nullptr;
 		RE::GFxValue hud;
 		if (!movie || !movie->GetVariable(&hud, HUD_PATH)) {
-			return;
+			return;  // no HUD to look at yet: a later prompt tries again
 		}
+		installTried = true;
 		RE::GFxValue existing;
 		GetIn(hud, ORIGINAL, &existing);
 		if (!existing.IsUndefined()) {
@@ -534,6 +536,7 @@ namespace
 		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
 		{
 			if (a_event && a_event->opening && a_event->menuName == RE::HUDMenu::MENU_NAME) {
+				installTried = false;  // a new HUD: look at it once
 				SKSE::GetTaskInterface()->AddUITask(Install);
 			}
 			return RE::BSEventNotifyControl::kContinue;
@@ -552,8 +555,10 @@ namespace Hud
 
 	void SetPrompt(RE::TESObjectREFR* a_target, bool a_marker, std::vector<std::string> a_labels)
 	{
-		if (!installed) {
-			SKSE::GetTaskInterface()->AddUITask(Install);  // in case the HUD opened before we were watching
+		// in case the HUD opened before we were watching: until the HUD has been looked at once (on a HUD without
+		// SetCrosshairTarget, every prompt queued another try and logged the warning again)
+		if (!installed && !installTried) {
+			SKSE::GetTaskInterface()->AddUITask(Install);
 		}
 		std::scoped_lock lock{ promptLock };
 		if (!a_target || (!a_marker && a_labels.empty())) {
