@@ -35,11 +35,19 @@ namespace
 		return { a_rule.primary, 0 };
 	}
 
-	// The first line of the game's own prompt ("Search" of "Search\nWolf")
-	std::string VanillaVerb(const RE::BSString& a_text)
+	// The first line of the game's own prompt ("Search" of "Search\nWolf"). A prompt that is only the target's name (the
+	// game offers no action on it right now) has no verb: empty, never the name as the action word.
+	std::string VanillaVerb(const RE::BSString& a_text, RE::TESObjectREFR* a_target)
 	{
 		const std::string_view text{ a_text.c_str() ? a_text.c_str() : "" };
-		return std::string{ text.substr(0, text.find('\n')) };
+		const auto newline = text.find('\n');
+		if (newline == std::string_view::npos) {
+			const char* name = a_target->GetDisplayFullName();
+			if (name && text == name) {
+				return {};
+			}
+		}
+		return std::string{ text.substr(0, newline) };
 	}
 
 	std::string GameString(const char* a_setting)
@@ -72,7 +80,7 @@ namespace
 			if (a_action.act == Rules::Do::kTake) {
 				return GameString(theft ? "sSteal" : "sTake");
 			}
-			return VanillaVerb(a_vanilla);
+			return VanillaVerb(a_vanilla, a_target);
 		}
 		return theft ? std::format("<font color='#FF0000'>{}</font>", a_action.Text()) : a_action.Text();
 	}
@@ -90,6 +98,7 @@ namespace
 		const auto alternates = Rules::Alternates(*rule, a_target);
 		const auto [action, index] = CurrentAction(*rule, alternates);
 		std::string label = LabelOf(action, a_target, a_dst);
+		const bool noVerb = label.empty();  // the game's prompt is the name alone and stays so (no action line)
 		// a modifier action exists: the HUD draws the modifier key's button after the label, or
 		// (ini, or no HUD) the text marker goes on the label itself
 		const bool marker = !alternates.empty() && index == 0;
@@ -133,6 +142,17 @@ namespace
 				rest = std::format("{}\n<img src='DiamondMarker' width='10' height='15' align='baseline' vspace='5'>{}",
 					rest.substr(0, rest.find('\n', 1)), *word);
 			}
+		}
+		if (noVerb) {
+			static std::set<RE::FormID> logged;  // once per target: the prompt is rebuilt every few frames
+			if (logged.insert(a_target->GetFormID()).second) {
+				logger::info("{:08X}: the game offers no action (its prompt is the name alone), so no action word", a_target->GetFormID());
+			}
+			// the name line first; a text marker (the label is only that now) goes on it
+			std::string text = rest.substr(1);
+			text.insert(std::min(text.find('\n'), text.size()), label);
+			a_dst = text.c_str();
+			return;
 		}
 		a_dst = (label + rest).c_str();
 	}
