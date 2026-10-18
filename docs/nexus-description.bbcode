@@ -1,9 +1,9 @@
 [center][size=6][b]Modifier Key Framework[/b][/size]
-[size=3]Custom activation actions for people and creatures, living or dead, with one shared modifier key for up to three more.
+[size=3]Custom activation actions for people, creatures and things in the world, with one shared modifier key for up to three more.
 No plugin. No perks. Just a JSON file.[/size][/center]
 
 [size=5][b]What is this?[/b][/size]
-A small SKSE framework that lets mods add their own actions when you activate an NPC or creature, living or dead (a body you loot counts too), and since 1.4.0 a book, item, door or container: [i]Give Potion[/i], [i]Search[/i], [i]Pick Up Carcass[/i], anything a mod needs. A mod can give them a normal action, and up to three more while you hold the [b]modifier key[/b].
+A small SKSE framework that lets mods add their own actions when you activate an NPC or creature, living or dead (a body you loot counts too), or a book, item, door or container in the world: [i]Give Potion[/i], [i]Search[/i], [i]Pick Up Carcass[/i], anything a mod needs. A mod can give them a normal action, and up to three more while you hold the [b]modifier key[/b].
 
 [b]For players:[/b] install it if a mod you use requires it. That's all; there is nothing to configure unless you want other keys.
 
@@ -18,7 +18,7 @@ I used Dynamic Activation Key for my own mods, and two things kept bothering me:
 So Modifier Key Framework keeps the vanilla two-line prompt with the name underneath, and shows the modifier key's own button whenever more actions are available.
 
 [size=5][b]What you see in game[/b][/size]
-The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
+The prompt keeps the vanilla look: the action on the first line, the name of who or what you're looking at on the second.
 [list]
 [*][b][LB] | [A] Give Potion[/b] / Lydia (keyboard: [b][Shift] | [E] Give Potion[/b]): the modifier key's button in front of the Activate button tells you more actions are available. The buttons are the same images your HUD uses for its own, and switch between keyboard and controller with it.
 [*]Hold the modifier key and the prompt switches to the action on that key: [b][A] Search[/b] / Lydia.
@@ -58,14 +58,14 @@ One JSON file per mod in [i]SKSE/Plugins/ModifierKeyFramework/[/i]:
     }
   ]
 }[/code]
-Activating sends an SKSE mod event to your script, with the NPC, the rule's id, and which action was used (0 the normal one, 1 to 3 the modifier actions in order):
+Activating sends an SKSE mod event to your script, with the target (the NPC or object), the rule's id, and which action was used (0 the normal one, 1 to 3 the modifier actions in order):
 [code]Event OnMyAction(String asEventName, String asRuleId, Float afAction, Form akTarget)[/code]
 [list]
 [*][b]One alternate or a list:[/b] [i]"alternate": { ... }[/i] for a single modifier action, or a list of up to three in order of importance (rule format 3). The framework gives out the buttons.
-[*][b]Objects (1.4.0):[/b] rules for books, items, doors and containers in the world, with their own conditions (kind, read, owned, locked, has the key, where a door leads, ...) and the game's own actions without a script: take, equip, equip and draw, use (drink, eat, apply), or the vanilla activation. Taking that would be a crime shows red, like the game's own "Steal". An action can show, in place of a lock's level, how the people behind the target feel about you (Friend, Enemy, ...), or (1.5.0) nothing at all.
+[*][b]Objects (1.4.0):[/b] rules for books, items, doors and containers in the world, with their own conditions (kind, read, owned, locked, has the key, where a door leads, ...) and the game's own actions without a script: take, equip, equip and draw, use (drink, eat, apply), or the vanilla activation. Taking that would be a crime shows red, like the game's own "Steal". An action can show, in place of a lock's level, how the people behind the target feel about you (Friend, Enemy, ..., or your own words per rank), or (1.5.0) nothing at all.
 [*][b]Dialogue topics (1.3.0):[/b] instead of an event, an action can pick a dialogue topic: the conversation starts the vanilla way and the topic is chosen for the player, so the NPC says their line and stays with you (e.g. [i]Buy / Sell[/i] that plays "What have you got for sale?" and opens the barter menu). [i]"endDialogue": true[/i] closes the conversation when that menu closes. Such an action only shows while the NPC offers the topic.
 [*][b]Keep the vanilla text:[/b] a [b]primary[/b] without a label keeps the game's own prompt ([i]Search[/i] on a dead body, [i]Talk[/i]), in the player's language. [i]"primary": {}[/i] keeps the activation fully vanilla.
-[*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat, offers a dialogue topic. Lists mean "any of these", and a [b]not[/b] block excludes.
+[*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat, offers a dialogue topic, in an interior. Lists mean "any of these", and a [b]not[/b] block excludes.
 [*][b]Optional mods welcome:[/b] a form from a plugin that isn't installed is simply ignored.
 [*][b]Priorities with a conflict log:[/b] when two mods want the same NPC, the higher priority wins and brings all its actions, ties are always resolved the same way (never by install order), and the log says who won and who lost.
 [*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
@@ -82,8 +82,8 @@ Full documentation, a complete example mod and a [b]Coming from Dynamic Activati
 [*][b]No plugin, no perk:[/b] a rule file instead of perk entry points, conditions and perk distribution; your plugin doesn't have to master anything.
 [*][b]The name stays on the prompt:[/b] [i]Search[/i] above [i]Lydia[/i], like vanilla, where a DAK action shows only [i]Search[/i].
 [*][b]Players can see that more actions exist:[/b] the modifier key's button on the prompt. DAK gives no hint at all.
-[*][b]Up to four actions per NPC[/b], each on its own button, the same layout for every mod.
-[*][b]Two mods on one NPC[/b] are resolved by priority, deterministically, and logged.
+[*][b]Up to four actions per target[/b], each on its own button, the same layout for every mod.
+[*][b]Two mods on one target[/b] are resolved by priority, deterministically, and logged.
 [*]DAK still has the Creation Kit's full condition set and works on any kind of object (this framework: NPCs, items, books, doors, containers). For conditions this framework doesn't have, give the NPC a keyword, faction or token item (SPID, KID, script) and require that.
 [/list]
 
@@ -115,6 +115,6 @@ The plugin is GPL-3.0-or-later (it statically links CommonLibSSE-NG); source on 
 [size=5][b]Future plans[/b][/size]
 The framework will stay small and focused: it decides [i]which[/i] actions a target gets and shows them; what an action does stays in the mod that uses it.
 [list]
-[*][b]More target types[/b] beyond NPCs and creatures, one at a time: [b]containers[/b] (chests, barrels, sacks), [b]activators[/b], [b]furniture and doors[/b], and eventually [b]books and loose items[/b], so every extra action in the game looks the same: the name on the prompt and the modifier key's button. Existing rule files keep working.
+[*][b]More target types:[/b] books, items, doors and containers arrived in 1.4.0; [b]activators[/b] and [b]furniture[/b] are next, so every extra action in the game looks the same: the name on the prompt and the modifier key's button. Existing rule files keep working.
 [*]Suggestions welcome: tell me in the comments which targets or conditions your mod needs.
 [/list]

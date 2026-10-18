@@ -6,7 +6,7 @@ doors and containers, declared in simple JSON files, with one shared **modifier 
 second action. An alternative to perk-based activation and Dynamic Activation Key: no plugin, no
 perk, no script needed just to show a prompt.
 
-- The prompt keeps the vanilla look: the action on the first line, the NPC's name on the second.
+- The prompt keeps the vanilla look: the action on the first line, the target's name on the second.
 - When a second action is available, the modifier key's button appears in front of the Activate
   button, the same images the HUD uses for its own buttons: `[LB] | [A] Give Potion` / `Lydia`
   (keyboard: `[Shift] | [E] Give Potion`).
@@ -119,7 +119,7 @@ in `ModifierKeyFramework.log` (`Documents/My Games/Skyrim Special Edition/SKSE/`
 
 ### When rules compete
 
-Only one rule runs per NPC: the matching rule with the highest `priority`. On a tie, the rule from
+Only one rule runs per target: the matching rule with the highest `priority`. On a tie, the rule from
 the file whose name sorts first wins (alphabetical, ignoring case), then the one listed first in
 that file. The result never depends on install order.
 
@@ -413,6 +413,8 @@ game controls for the second and third modifier action (`sSlot2Control`, default
   before the NPC's own activation and wins.
 - **QuickLoot-style mods** take over activating dead bodies and containers, so actions on dead NPCs
   may not be reachable while their window shows.
+- **Read Or Take / Use Or Take (powerofthree):** fine with mods that only use NPC rules. MKF - Read
+  Or Take and MKF - Use Or Take do the same job on this framework; don't use both versions together.
 
 ## Building
 
@@ -441,7 +443,7 @@ examples/     example mod (rule file + Papyrus), not part of the release
 
 ## License
 
-GPL-3.0-or-later (the plugin statically links CommonLibSSE-NG). See [skse/LICENSE](skse/LICENSE).
+GPL-3.0-or-later (the plugin statically links CommonLibSSE-NG). See [LICENSE](LICENSE).
 Mods that only use the framework through rule files and Papyrus are not affected by it.
 
 ## Credits
