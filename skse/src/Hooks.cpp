@@ -9,9 +9,11 @@
 
 namespace
 {
-	// Set while the framework runs a vanilla activation itself (a slot action that "activate"s): the hooked Activate
-	// passes it straight on instead of choosing an action again.
-	thread_local bool runningVanilla = false;
+	// Set while the game handles the player's own Activate press (ActivateHandler's button function). Only those
+	// activations get the rules' actions: a mod or script activating something for the player (eXrim starting its con's
+	// conversation while the modifier key is still held; the framework's own vanilla activation for a slot action that
+	// "activate"s) gets the game's own activation.
+	thread_local bool playerPress = false;
 
 	// The action Activate runs right now: the first modifier action the target offers while the modifier key is held,
 	// otherwise the top rule's primary. rule: the rule the action belongs to (with several rules merged, not always the
@@ -259,14 +261,24 @@ namespace
 		static bool Activate(RE::TESBoundObject* a_this, RE::TESObjectREFR* a_target, RE::TESObjectREFR* a_activator, std::uint8_t a_arg3, RE::TESBoundObject* a_object, std::int32_t a_count)
 		{
 			const auto vanilla = [&] { return activate(a_this, a_target, a_activator, a_arg3, a_object, a_count); };
-			if (!runningVanilla && a_activator && a_activator->IsPlayerRef() && a_target) {
-				if (const auto resolved = Rules::Resolve(a_target); resolved.top) {
-					Rules::ReportMerge(a_target, resolved);
-					const auto current = CurrentAction(resolved);
-					return Perform(current.rule, current.action, current.index, a_target, vanilla);
-				}
+			if (!a_activator || !a_activator->IsPlayerRef() || !a_target) {
+				return vanilla();
 			}
-			return vanilla();
+			if (!playerPress) {
+				static bool logged = false;  // the first one only: some mods activate things for the player all the time
+				if (!logged && Rules::Resolve(a_target).top) {
+					logged = true;
+					logger::info("{:08X}: activated for the player by a mod or script, not the Activate button: the game's own activation (logged once)", a_target->GetFormID());
+				}
+				return vanilla();
+			}
+			const auto resolved = Rules::Resolve(a_target);
+			if (!resolved.top) {
+				return vanilla();
+			}
+			Rules::ReportMerge(a_target, resolved);
+			const auto current = CurrentAction(resolved);
+			return Perform(current.rule, current.action, current.index, a_target, vanilla);
 		}
 
 		static inline REL::Relocation<decltype(GetActivateText)> getText;
@@ -310,16 +322,35 @@ namespace
 		if (button->IsDown()) {
 			Rules::ReportMerge(target.get(), resolved);
 			const auto& slot = resolved.alternates[alternate];
-			// the vanilla activation, bypassing the hook (which would pick the Activate button's action)
+			// the vanilla activation: not an Activate press, so the hook passes it on
 			Perform(*slot.rule, *slot.action, slot.index, target.get(), [&] {
-				runningVanilla = true;
-				const bool result = target->ActivateRef(RE::PlayerCharacter::GetSingleton(), 0, nullptr, std::max(1, target->extraList.GetCount()), false);
-				runningVanilla = false;
-				return result;
+				return target->ActivateRef(RE::PlayerCharacter::GetSingleton(), 0, nullptr, std::max(1, target->extraList.GetCount()), false);
 			});
 		}
 		return true;  // the whole press (down, held, up) belongs to the action
 	}
+
+	// The player's Activate press: the activation of the crosshair target happens inside the handler's button function
+	// (slot 4; 6 from 1.7.99, which added two input functions before it).
+	struct ActivateButton
+	{
+		static void thunk(RE::ActivateHandler* a_this, RE::ButtonEvent* a_event, RE::PlayerControlsData* a_data)
+		{
+			const bool outer = playerPress;
+			playerPress = true;
+			func(a_this, a_event, a_data);
+			playerPress = outer;
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+
+		static void Install()
+		{
+			REL::Relocation<std::uintptr_t> vtbl{ RE::ActivateHandler::VTABLE[0] };
+			const auto index = REL::VersionShift(0x4, RE::PlayerInputHandler::kAE1799AddedVFuncCount, SKSE::RUNTIME_SSE_1_7_99);
+			func = REL::Relocation<decltype(thunk)>{ vtbl.write_vfunc(index, thunk) };
+			logger::info("Hooks installed: ActivateHandler button ({:#x})", index);
+		}
+	};
 
 	// One per game handler a slot control can belong to (Settings::SupportedSlotControls)
 	template <class Handler, RE::BSFixedString RE::UserEvents::*Control>
@@ -364,6 +395,7 @@ namespace Hooks
 			ObjectHooks<RE::TESSoulGem>::Install("TESSoulGem");
 			ObjectHooks<RE::TESObjectDOOR>::Install("TESObjectDOOR");
 			ObjectHooks<RE::TESObjectCONT>::Install("TESObjectCONT");
+			ActivateButton::Install();
 
 			// the controls modifier actions 2 and 3 can use (ini sSlot2Control / sSlot3Control)
 			SlotControl<RE::ReadyWeaponHandler, &RE::UserEvents::readyWeapon>::Install();

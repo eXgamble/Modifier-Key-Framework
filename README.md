@@ -174,6 +174,10 @@ EndEvent
 
 All actions may use the same `event`, or different ones.
 
+The framework only takes the player's own Activate presses (1.6.1+). When your handler activates the
+target itself, e.g. `akTarget.Activate(Game.GetPlayer())` to start a conversation after setting
+something up, the game's own activation runs, even while the modifier key is still held.
+
 ### More than one modifier action
 
 `"alternate"` can be a list of up to three actions (rule file `"version": 3`). Your mod only lists

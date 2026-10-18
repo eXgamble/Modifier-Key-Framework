@@ -71,6 +71,7 @@ Activating sends an SKSE mod event to your script, with the target (the NPC or o
 [*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
 [*][b]Papyrus API:[/b] version, is the key held, and switch your rules on or off at runtime (e.g. from your MCM).
 [*][b]Label only:[/b] leave out the event and only the label changes; activation stays vanilla.
+[*][b]Your own activations stay vanilla (1.6.1):[/b] the framework only takes the player's Activate presses, so a script that activates the target from its handler (to start a conversation, say) gets the game's own activation, even while the modifier key is held.
 [*][b]Clear errors:[/b] typos, wrong form types and bad IDs are reported in [i]ModifierKeyFramework.log[/i] instead of silently doing nothing. A rule file written for a newer framework is skipped with a message to update.
 [*][b]Editor support:[/b] a JSON schema for autocomplete and checks in VS Code and other editors.
 [*][b]Backward compatible:[/b] rule files and scripts written for 1.0 work unchanged.
