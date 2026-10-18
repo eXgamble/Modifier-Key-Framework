@@ -5,8 +5,8 @@
 // The vanilla prompt is two HUD fields: RolloverText ("Search\nDeer", HTML, grows down from its top)
 // and RolloverButton_tf (the button image, placed left of the first line). Both are set by the HUD's
 // SetCrosshairTarget, which the game calls. We shadow that function on the HUD instance with a native
-// one: it runs the original, then adds what MKF needs: the modifier key's button right of the first
-// line (the target has modifier actions), or, while the key is held, the extra labels above the first
+// one: it runs the original, then adds what MKF needs: the modifier key's button beside the Activate
+// button (the target has modifier actions), or, while the key is held, the extra labels above the first
 // line, the Activate button moved down to its line, and one more button per extra line. Every button
 // is filled by the HUD's own RefreshActivateButtonArt, so it looks exactly like the skin's Activate
 // button. No swf is replaced: this works with any HUD that keeps vanilla's names.
@@ -304,12 +304,71 @@ namespace
 		return true;
 	}
 
-	// The width of the image in a field's HTML (its IMG tag's WIDTH)
-	double ImageWidth(const std::string& a_html)
+	// Flash draws a text field's lines 2 units in from its box
+	constexpr double GUTTER = 2.0;
+
+	// What a text field draws on its first line, in its parent's coordinates: the line itself, never the field's box.
+	// Skins differ in box sizes, alignment and margins (vanilla's Activate box is 100 wide with the image at its right
+	// edge; our separator's box is wider than its "|"), so only what is drawn lines things up on every HUD.
+	struct Line
 	{
-		const auto tag = ImageTag(a_html);
-		const auto at = tag.find("WIDTH=\"");
-		return at == std::string::npos ? 0.0 : std::atof(tag.c_str() + at + 7);
+		double left = 0.0;
+		double right = 0.0;
+		double top = 0.0;
+		double bottom = 0.0;
+
+		bool   Valid() const { return right > left && bottom > top; }  // false for NaN too
+		double Width() const { return right - left; }
+		double Height() const { return bottom - top; }
+		double CenterX() const { return (left + right) / 2.0; }
+		double CenterY() const { return (top + bottom) / 2.0; }
+	};
+
+	double Scale(const RE::GFxValue& a_field, const char* a_member)
+	{
+		const double scale = Number(a_field, a_member);
+		return scale > 0.0 ? scale / 100.0 : 1.0;
+	}
+
+	Line FirstLine(RE::GFxValue& a_field)
+	{
+		RE::GFxValue metrics;
+		RE::GFxValue arg(0.0);
+		if (!CallIn(a_field, "getLineMetrics", &metrics, &arg, 1) || !metrics.IsObject()) {
+			return {};
+		}
+		const double sx = Scale(a_field, "_xscale");
+		const double sy = Scale(a_field, "_yscale");
+		const double x = Number(a_field, "_x") + Number(metrics, "x") * sx;
+		const double y = Number(a_field, "_y") + GUTTER * sy;
+		return { x, x + Number(metrics, "width") * sx, y, y + Number(metrics, "height") * sy };
+	}
+
+	// Move a field (shown like the HUD's own button) so its first line's right edge (a_rightEdge, for a place left of
+	// something) or left edge lands on a_x, and the line's middle on a_centerY. What it draws then, or nothing.
+	Line PlaceLine(RE::GFxValue& a_field, const RE::GFxValue& a_button, double a_x, bool a_rightEdge, double a_centerY)
+	{
+		const auto line = FirstLine(a_field);
+		if (!line.Valid()) {
+			return {};
+		}
+		const double dx = a_x - (a_rightEdge ? line.right : line.left);
+		const double dy = a_centerY - line.CenterY();
+		Place(a_field, a_button, Number(a_field, "_x") + dx, Number(a_field, "_y") + dy);
+		return FirstLine(a_field);
+	}
+
+	// The ini's text marker after the label's first line: for a HUD without an image for the modifier key, or a prompt
+	// MKF can't measure
+	void ShowTextMarker(RE::GFxValue& a_text, const RE::GFxValue& a_name)
+	{
+		if (Settings::AlternateMarker().empty() || !a_name.IsString()) {
+			return;
+		}
+		std::string html = a_name.GetString();
+		html.insert(std::min(html.find('\n'), html.size()), " " + EscapeHtml(Settings::AlternateMarker()));
+		std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
+		CallIn(a_text, "SetText", nullptr, setArgs.data(), setArgs.size());
 	}
 
 	// The separator between the modifier key's button and the Activate button, in the prompt's font
@@ -344,32 +403,48 @@ namespace
 		return field;
 	}
 
-	// The modifier key's button left of the Activate button: "[LB] | [A] Search". Same gaps as between
-	// the Activate button and the text. Without an image for that key, the ini's text marker instead.
+	// The modifier key's button beside the Activate button, on the side away from the label: "[LB] | [A] Search".
+	// Placed from what the skin draws, with the skin's own gap between its Activate button and the label, so it follows
+	// the Activate button wherever a HUD puts it: left of the label (vanilla, Oathvein), on a row of its own (SkyHUD's
+	// default), or right of the label. No image for that key, or a prompt that doesn't measure up: the text marker.
 	void ShowModifier(RE::GFxValue& a_hud, RE::GFxValue& a_text, RE::GFxValue& a_button, const RE::GFxValue& a_name)
 	{
-		auto field = Field(a_button, "mkfModifier");
-		if (!ShowArt(a_hud, a_button, field, ModifierArt(ActivateArt(a_button)))) {
-			if (!Settings::AlternateMarker().empty()) {
-				std::string html = a_name.GetString();
-				html.insert(std::min(html.find('\n'), html.size()), " " + EscapeHtml(Settings::AlternateMarker()));
-				std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };
-				CallIn(a_text, "SetText", nullptr, setArgs.data(), setArgs.size());
-			}
+		const auto button = FirstLine(a_button);
+		const auto label = FirstLine(a_text);
+		auto       field = Field(a_button, "mkfModifier");
+		if (!button.Valid() || !label.Valid() || !ShowArt(a_hud, a_button, field, ModifierArt(ActivateArt(a_button)))) {
+			ShowTextMarker(a_text, a_name);
 			return;
 		}
-		// both button fields are right-aligned: a field's right edge is its image's right edge
-		const auto line = GetLine(a_text, 0);
-		const double buttonRight = Number(a_button, "_x") + Number(a_button, "_width");
-		const double gap = Number(a_text, "_x") + line.x - buttonRight;
-		double right = buttonRight - ImageWidth(HtmlOf(a_button)) - gap;  // left of the Activate image
+		// the label level with the button gives the side and the gap; a button on a row of its own gets a gap from its
+		// size, and the modifier on its left
+		const bool   sameRow = button.CenterY() > label.top && button.CenterY() < label.bottom;
+		const bool   left = !sameRow || label.CenterX() > button.CenterX();
+		const double skinGap = left ? label.left - button.right : button.left - label.right;
+		const bool   useSkinGap = sameRow && skinGap >= 1.0 && skinGap <= button.Height();
+		const double gap = useSkinGap ? skinGap : std::max(2.0, button.Height() / 4.0);
+		double       edge = left ? button.left - gap : button.right + gap;
 		if (!Settings::ModifierSeparator().empty()) {
-			auto separator = Separator(a_button, a_text);
-			const double width = Number(separator, "_width");
-			Place(separator, a_button, right - width, Number(a_text, "_y"));
-			right -= width + gap;
+			auto       separator = Separator(a_button, a_text);
+			const auto line = PlaceLine(separator, a_button, edge, left, sameRow ? label.CenterY() : button.CenterY());
+			if (line.Valid()) {
+				edge = left ? line.left - gap : line.right + gap;
+			}
 		}
-		Place(field, a_button, right - Number(a_button, "_width"), Number(a_button, "_y"));
+		if (!PlaceLine(field, a_button, edge, left, button.CenterY()).Valid()) {
+			HideFields(a_button);
+			ShowTextMarker(a_text, a_name);
+			return;
+		}
+		// a line when the layout changes (another skin, keyboard <-> gamepad), not per prompt
+		static std::string logged;  // UI thread only
+		auto layout = std::format("{}: the modifier key {} it, gap {:.1f} ({}), Activate button {:.1f} x {:.1f}",
+			sameRow ? "label beside the Activate button" : "Activate button on a row of its own", left ? "left of" : "right of", gap,
+			useSkinGap ? "the skin's" : "from the button's size", button.Width(), button.Height());
+		if (layout != logged) {
+			logger::info("HUD: {}", layout);
+			logged = std::move(layout);
+		}
 	}
 
 	void Apply(RE::GFxValue& a_hud, bool a_activate, const RE::GFxValue& a_name)

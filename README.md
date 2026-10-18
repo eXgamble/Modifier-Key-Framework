@@ -401,9 +401,12 @@ game controls for the second and third modifier action (`sSlot2Control`, default
 
 - **HUD and UI mods:** the buttons are drawn into the game's own HUD at runtime (the HUD's
   `SetCrosshairTarget` and `RefreshActivateButtonArt` are wrapped, no swf is replaced), so any HUD
-  that keeps the vanilla activation prompt works; tested with Oathvein UI. The images are the HUD's
-  own (`360_X.png`, `R.png`, ...) and follow its keyboard/controller switch. A HUD without an image
-  for a button gets the text marker instead.
+  that keeps the vanilla activation prompt works; tested with the vanilla HUD, SkyHUD (default
+  settings) and Oathvein UI. The modifier key's button is placed from what the skin draws, with the
+  skin's own gap, so it stays beside the Activate button wherever a HUD puts it (left of the label, or
+  on a row of its own). The images are the HUD's own (`360_X.png`, `R.png`, ...) and follow its
+  keyboard/controller switch. A HUD without an image for a button, or a prompt MKF can't measure,
+  gets the text marker instead.
 - **Controller layouts with LB combos** (e.g. Kontrol): actions they put on Left Shoulder + X or Y
   still happen alongside the second and third modifier action. Move them, or pick another modifier.
 - **Dynamic Activation Key:** give it a different key. With the same key, its perk-based action acts
