@@ -14,25 +14,23 @@ namespace
 	thread_local bool runningVanilla = false;
 
 	// The action Activate runs right now: the first modifier action the target offers while the modifier key is held,
-	// otherwise the primary. index: the action's place in the rule, 0 = primary, 1-3 = modifier action, the same number
-	// the mod event carries whichever slot the action ends up on.
+	// otherwise the top rule's primary. rule: the rule the action belongs to (with several rules merged, not always the
+	// top one). index: the action's place in that rule, 0 = primary, 1-3 = modifier action, the same number the mod event
+	// carries whichever slot the action ends up on.
 	struct Current
 	{
+		const Rules::Rule&   rule;
 		const Rules::Action& action;
 		std::int32_t         index;
 	};
 
-	std::int32_t IndexOf(const Rules::Rule& a_rule, const Rules::Action& a_action)
+	Current CurrentAction(const Rules::Resolved& a_resolved)
 	{
-		return &a_action == &a_rule.primary ? 0 : static_cast<std::int32_t>(&a_action - a_rule.alternates.data()) + 1;
-	}
-
-	Current CurrentAction(const Rules::Rule& a_rule, const std::vector<const Rules::Action*>& a_alternates)
-	{
-		if (!a_alternates.empty() && Input::IsModifierHeld()) {
-			return { *a_alternates.front(), IndexOf(a_rule, *a_alternates.front()) };
+		if (!a_resolved.alternates.empty() && Input::IsModifierHeld()) {
+			const auto& slot = a_resolved.alternates.front();
+			return { *slot.rule, *slot.action, slot.index };
 		}
-		return { a_rule.primary, 0 };
+		return { *a_resolved.top, a_resolved.top->primary, 0 };
 	}
 
 	// The first line of the game's own prompt ("Search" of "Search\nWolf"). A prompt that is only the target's name (the
@@ -86,17 +84,20 @@ namespace
 	}
 
 	// The activation prompt: "<label>\n<the game's own second line>" (the name, plus whatever the game shows there).
-	// When the matched rule also has a modifier action, the HUD draws the modifier key's button after the primary label
-	// (or the ini's text marker goes on it); while the key is held the prompt shows the modifier actions instead.
+	// When the target also has a modifier action (from any matching rule), the HUD draws the modifier key's button beside
+	// the primary label (or the ini's text marker goes on it); while the key is held the prompt shows the modifier actions
+	// instead.
 	void Prompt(RE::TESObjectREFR* a_target, RE::BSString& a_dst)
 	{
-		const auto rule = Rules::Match(a_target);
-		if (!rule) {
+		const auto resolved = Rules::Resolve(a_target);
+		if (!resolved.top) {
 			Hud::ClearPrompt();
 			return;
 		}
-		const auto alternates = Rules::Alternates(*rule, a_target);
-		const auto [action, index] = CurrentAction(*rule, alternates);
+		const auto& alternates = resolved.alternates;
+		const auto  current = CurrentAction(resolved);
+		const auto& action = current.action;
+		const auto  index = current.index;
 		std::string label = LabelOf(action, a_target, a_dst);
 		const bool noVerb = label.empty();  // the game's prompt is the name alone and stays so (no action line)
 		// a modifier action exists: the HUD draws the modifier key's button after the label, or
@@ -110,7 +111,7 @@ namespace
 		std::vector<std::string> extra;
 		if (index != 0) {
 			for (std::size_t slot = 1; slot < alternates.size(); ++slot) {
-				extra.push_back(LabelOf(*alternates[slot], a_target, a_dst));
+				extra.push_back(LabelOf(*alternates[slot].action, a_target, a_dst));
 			}
 		}
 		Hud::SetPrompt(a_target, iconMarker, std::move(extra));
@@ -159,8 +160,8 @@ namespace
 
 	// Send a rule's SKSE mod event: the mod that owns the rule reacts in Papyrus
 	// (RegisterForModEvent). Event(String eventName, String ruleId, Float action, Form target):
-	// the rule's id, which action (0.0 primary, 1.0-3.0 the modifier actions in slot order, so 1.0 is
-	// the single alternate as before), and the target as sender.
+	// the rule's id, which action (0.0 primary, 1.0-3.0 the rule's own modifier actions in its order, so 1.0 is
+	// the single alternate as before, whichever button it lands on next to other mods' actions), and the target as sender.
 	// Queued as a task, by handle, so it runs on the game thread.
 	void SendRuleEvent(const Rules::Rule& a_rule, const Rules::Action& a_action, std::int32_t a_index, RE::TESObjectREFR* a_target)
 	{
@@ -259,10 +260,10 @@ namespace
 		{
 			const auto vanilla = [&] { return activate(a_this, a_target, a_activator, a_arg3, a_object, a_count); };
 			if (!runningVanilla && a_activator && a_activator->IsPlayerRef() && a_target) {
-				if (const auto rule = Rules::Match(a_target)) {
-					Rules::ReportConflicts(a_target, rule);
-					const auto [action, index] = CurrentAction(*rule, Rules::Alternates(*rule, a_target));
-					return Perform(*rule, action, index, a_target, vanilla);
+				if (const auto resolved = Rules::Resolve(a_target); resolved.top) {
+					Rules::ReportMerge(a_target, resolved);
+					const auto current = CurrentAction(resolved);
+					return Perform(current.rule, current.action, current.index, a_target, vanilla);
 				}
 			}
 			return vanilla();
@@ -302,16 +303,15 @@ namespace
 		}
 		const auto pick = RE::CrosshairPickData::GetSingleton();
 		const auto target = pick ? pick->GetActiveTarget().get() : nullptr;
-		const auto rule = Rules::Match(target.get());
-		const auto alternates = rule ? Rules::Alternates(*rule, target.get()) : std::vector<const Rules::Action*>{};
-		if (alternates.size() <= alternate) {
+		const auto resolved = Rules::Resolve(target.get());
+		if (resolved.alternates.size() <= alternate) {
 			return false;
 		}
 		if (button->IsDown()) {
-			Rules::ReportConflicts(target.get(), rule);
-			const auto& action = *alternates[alternate];
+			Rules::ReportMerge(target.get(), resolved);
+			const auto& slot = resolved.alternates[alternate];
 			// the vanilla activation, bypassing the hook (which would pick the Activate button's action)
-			Perform(*rule, action, IndexOf(*rule, action), target.get(), [&] {
+			Perform(*slot.rule, *slot.action, slot.index, target.get(), [&] {
 				runningVanilla = true;
 				const bool result = target->ActivateRef(RE::PlayerCharacter::GetSingleton(), 0, nullptr, std::max(1, target->extraList.GetCount()), false);
 				runningVanilla = false;

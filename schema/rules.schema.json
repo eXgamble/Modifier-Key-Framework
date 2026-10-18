@@ -9,9 +9,9 @@
   "properties": {
     "$schema": { "type": "string" },
     "version": {
-      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional. Version 3 (framework 1.2.0): alternate can be a list of up to 3 actions. Version 4 (framework 1.3.0): the topic condition, and actions that pick a dialogue topic (topic, endDialogue). Version 5 (framework 1.4.0): object targets and do actions. Version 6 (framework 1.5.0): info none.",
+      "description": "Rule format version this file is written for. Files without it are version 1. Version 2 (framework 1.1.0): primary and its label are optional. Version 3 (framework 1.2.0): alternate can be a list of up to 3 actions. Version 4 (framework 1.3.0): the topic condition, and actions that pick a dialogue topic (topic, endDialogue). Version 5 (framework 1.4.0): object targets and do actions. Version 6 (framework 1.5.0): info none. Version 7 (framework 1.6.0): exclusive.",
       "type": "integer",
-      "enum": [1, 2, 3, 4, 5, 6]
+      "enum": [1, 2, 3, 4, 5, 6, 7]
     },
     "translations": {
       "description": "Name of the translation file for $Key labels: Interface/Translations/<name>_<LANGUAGE>.txt. Default: this file's name without .json.",
@@ -68,6 +68,11 @@
           "description": "false: off until a script calls ModifierKeyFramework.SetRuleEnabled(file, id, true).",
           "type": "boolean",
           "default": true
+        },
+        "exclusive": {
+          "description": "Rule format 7. true: this rule shares the target with no other. Without it (since framework 1.6.0) every rule that matches a target adds its modifier actions to the buttons, highest priority first; an exclusive rule on top shows only its own actions, and one below another rule is left out.",
+          "type": "boolean",
+          "default": false
         }
       }
     },

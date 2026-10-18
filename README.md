@@ -59,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -77,7 +77,8 @@ Each rule:
 An action can pick a dialogue topic instead of sending an event (format `4`, see
 [Dialogue topics](#dialogue-topics)), or do one of the game's own things (format `5`, see
 [Objects](#objects)).
-| `priority` | when several rules match, the highest wins (default 0) |
+| `priority` | when several rules match, the highest one's primary is used and its modifier actions come first (default 0; see [When rules meet](#when-rules-meet)) |
+| `exclusive` | optional, format `7`: `true` keeps the target to this rule alone, no other mod's actions merged in (see [When rules meet](#when-rules-meet)) |
 | `enabled` | optional, default `true`; `false` = off until a script turns it on (see [Papyrus API](#papyrus-api)) |
 
 ### Conditions
@@ -117,17 +118,29 @@ to mention optional mods, especially in `not`.
 malformed or missing form, or a form of the wrong type skips the rule (or the file) with the reason
 in `ModifierKeyFramework.log` (`Documents/My Games/Skyrim Special Edition/SKSE/`).
 
-### When rules compete
+### When rules meet
 
-Only one rule runs per target: the matching rule with the highest `priority`. On a tie, the rule from
-the file whose name sorts first wins (alphabetical, ignoring case), then the one listed first in
-that file. The result never depends on install order.
+Since 1.6.0 rules from several mods share a target instead of one taking it over:
+
+- **Activate** (the primary) comes from the matching rule with the highest `priority`.
+- **The modifier actions** of every matching rule go onto the buttons together, highest priority
+  first, each rule's own in its order: up to 3 (A, X, Y). A merchant that eXrim can pickpocket and
+  Merchants and Trainers can trade with gets `[A] Buy / Sell` and `[X] Pickpocket`. An action whose
+  label is already there shows once; actions past the third are left out.
+- Each action still sends its own mod's event with its own number (`afAction`: its place in its own
+  rule), whichever button it lands on, so scripts don't change.
+- `"exclusive": true` (format `7`) keeps a target to one rule: on top, only its actions show; below
+  another rule, it's left out. For a rule whose actions make no sense next to others (a moment where
+  only that mod's choice should be on screen).
+
+On a tie in `priority`, the rule from the file whose name sorts first comes first (alphabetical,
+ignoring case), then the one listed first in that file. The result never depends on install order.
 
 The log helps sort out overlaps between mods:
 
-- at startup, every priority shared by rules from different files, in winning order;
-- when the player activates an NPC that rules from other files also match, which rule was used and
-  which were ignored (each pair once per session).
+- at startup, every priority shared by rules from different files, in order;
+- when the player activates a target several rules match, which rule gave Activate, which action
+  landed on which button, and what was left out and why (once per combination of rules per session).
 
 ### Handling the action in Papyrus
 
@@ -201,8 +214,8 @@ controller's face buttons:
 ```
 
 The X and Y controls do their normal job (drawing the weapon, jumping) everywhere else: the framework
-only takes them while the modifier key is held over a target whose rule has that many actions. One
-rule wins per target and brings all its actions; actions from different mods are never mixed.
+only takes them while the modifier key is held over a target with that many actions. With several
+mods on one target, their actions share the buttons (see [When rules meet](#when-rules-meet)).
 
 ### Objects
 
@@ -384,7 +397,7 @@ and the perk fragment's code moves into the `MyMod_Search` event handler.
 | Plugin | your mod's plugin must master DAK | none; no load order slot |
 | Prompt shows the NPC's name | no: the action label replaces the whole prompt (`Search`) | yes: vanilla two lines (`Search` / `Lydia`) |
 | Player sees a second action | no | yes: the modifier key's button on the prompt |
-| Two mods on the same NPC | perk entry priority, silent | priority, deterministic, logged |
+| Two mods on the same NPC | perk entry priority, silent | both mods' actions on the buttons, ordered by priority, logged |
 | Conditions | the Creation Kit's full condition set | the list above; anything else through a keyword, faction or item |
 | Targets | anything a perk entry point can target | NPCs and creatures; books, items, doors and containers (1.4.0) |
 

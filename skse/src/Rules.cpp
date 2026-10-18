@@ -17,7 +17,8 @@ namespace
 	// 4 (1.3.0): the "topic" condition, and actions that pick a dialogue topic ("topic", "endDialogue").
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
 	// 6 (1.5.0): "info": "none" (nothing below the name line).
-	constexpr std::int32_t RULE_FORMAT_VERSION = 6;
+	// 7 (1.6.0): "exclusive" (a rule that shares the target with no other; since 1.6.0 matching rules are merged).
+	constexpr std::int32_t RULE_FORMAT_VERSION = 7;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
@@ -468,8 +469,17 @@ namespace
 				if (!entry.is_object()) {
 					throw RuleError{ "a rule must be an object" };
 				}
-				CheckKeys(entry, { "id", "target", "requires", "not", "primary", "alternate", "priority", "enabled" }, "the rule");
+				CheckKeys(entry, { "id", "target", "requires", "not", "primary", "alternate", "priority", "enabled", "exclusive" }, "the rule");
 				rule.priority = entry.value("priority", 0);
+				if (entry.contains("exclusive")) {
+					if (fileVersion < 7) {
+						throw RuleError{ "\"exclusive\" needs \"version\": 7" };
+					}
+					if (!entry["exclusive"].is_boolean()) {
+						throw RuleError{ "\"exclusive\" must be true or false" };
+					}
+					rule.exclusive = entry["exclusive"].get<bool>();
+				}
 				if (entry.contains("enabled")) {
 					if (!entry["enabled"].is_boolean()) {
 						throw RuleError{ "\"enabled\" must be true or false" };
@@ -736,30 +746,46 @@ namespace Rules
 				for (auto it = first; it != last; ++it) {
 					order += std::format("{}{} / {}", order.empty() ? "" : ", ", it->file, it->id);
 				}
-				logger::info("Priority {} is shared by several mods; when more than one matches, the first wins: {}", first->priority, order);
+				logger::info("Priority {} is shared by several mods; when more than one matches, the first one's Activate action is used and its modifier actions come first: {}", first->priority, order);
 			}
 			first = last;
 		}
 		logger::info("{} rule(s) active", rules.size());
 	}
 
-	const Rule* Match(RE::TESObjectREFR* a_ref)
+	Resolved Resolve(RE::TESObjectREFR* a_ref)
 	{
+		Resolved resolved;
 		if (!a_ref || rules.empty()) {
-			return nullptr;
+			return resolved;
 		}
 		const auto actor = a_ref->As<RE::Actor>();
 		if (!actor && !objectRules) {
-			return nullptr;
+			return resolved;
 		}
 		Inventory inventory(actor);
-		for (const auto& rule : rules) {
-			if (rule.enabled.value && ForKind(rule, actor != nullptr) && Check(rule.requirements, a_ref, inventory, true) &&
-				!Check(rule.exclusions, a_ref, inventory, false)) {
-				return &rule;
+		for (const auto& rule : rules) {  // highest priority first
+			if (!rule.enabled.value || !ForKind(rule, actor != nullptr) || !Check(rule.requirements, a_ref, inventory, true) ||
+				Check(rule.exclusions, a_ref, inventory, false)) {
+				continue;
+			}
+			if (!resolved.top) {
+				resolved.top = &rule;
+			} else if (resolved.top->exclusive || rule.exclusive) {
+				resolved.leftOut.push_back({ &rule, nullptr, LeftOut::Why::kExclusive });
+				continue;
+			}
+			for (const auto* action : Alternates(rule, a_ref)) {
+				const auto& text = action->Text();
+				const bool  shown = !text.empty() && std::ranges::any_of(resolved.alternates, [&](const Slot& a_slot) { return a_slot.action->Text() == text; });
+				if (shown || resolved.alternates.size() >= MAX_ALTERNATES) {
+					resolved.leftOut.push_back({ &rule, action, shown ? LeftOut::Why::kDuplicate : LeftOut::Why::kFull });
+					continue;
+				}
+				resolved.alternates.push_back({ &rule, action, static_cast<std::int32_t>(action - rule.alternates.data()) + 1 });
 			}
 		}
-		return nullptr;
+		return resolved;
 	}
 
 	void ResetEnabled()
@@ -848,27 +874,40 @@ namespace Rules
 		return nullptr;
 	}
 
-	void ReportConflicts(RE::TESObjectREFR* a_ref, const Rule* a_winner)
+	void ReportMerge(RE::TESObjectREFR* a_ref, const Resolved& a_resolved)
 	{
-		static std::set<std::pair<const Rule*, const Rule*>> reported;
-
-		const auto actor = a_ref->As<RE::Actor>();
-		Inventory  inventory(actor);
-		bool      after = false;
-		for (const auto& rule : rules) {
-			if (&rule == a_winner) {
-				after = true;
-				continue;
-			}
-			if (!after || !rule.enabled.value || !ForKind(rule, actor != nullptr) || rule.file == a_winner->file || reported.contains({ a_winner, &rule })) {
-				continue;
-			}
-			if (Check(rule.requirements, a_ref, inventory, true) && !Check(rule.exclusions, a_ref, inventory, false)) {
-				reported.insert({ a_winner, &rule });
-				const char* name = a_ref->GetDisplayFullName();
-				logger::info("Conflict on {} ({:08X}): {} / {} (priority {}) is used; {} / {} (priority {}) also matches and is ignored",
-					name ? name : "?", a_ref->GetFormID(), a_winner->file, a_winner->id, a_winner->priority, rule.file, rule.id, rule.priority);
-			}
+		if (!a_ref || !a_resolved.top) {
+			return;
 		}
+		// only when more than one rule is involved, once per combination of rules
+		std::vector<const Rule*> involved{ a_resolved.top };
+		for (const auto& slot : a_resolved.alternates) {
+			involved.push_back(slot.rule);
+		}
+		for (const auto& out : a_resolved.leftOut) {
+			involved.push_back(out.rule);
+		}
+		std::ranges::sort(involved);
+		involved.erase(std::ranges::unique(involved).begin(), involved.end());
+		static std::set<std::vector<const Rule*>> reported;
+		if (involved.size() < 2 || !reported.insert(involved).second) {
+			return;
+		}
+		const auto source = [](const Rule* a_rule) { return std::format("{} / {}, priority {}", a_rule->file, a_rule->id, a_rule->priority); };
+		const auto label = [](const Action* a_action) { return a_action->Text().empty() ? std::string{ "the game's own" } : a_action->Text(); };
+		std::string text = std::format("Activate from {}", source(a_resolved.top));
+		for (std::size_t i = 0; i < a_resolved.alternates.size(); ++i) {
+			const auto& slot = a_resolved.alternates[i];
+			text += std::format("; modifier action {}: \"{}\" ({})", i + 1, label(slot.action), source(slot.rule));
+		}
+		for (const auto& out : a_resolved.leftOut) {
+			const auto what = out.action ? std::format("\"{}\" ({})", label(out.action), source(out.rule)) : source(out.rule);
+			const auto why = out.why == LeftOut::Why::kExclusive ? (a_resolved.top->exclusive ? "the top rule is exclusive" : "it is exclusive") :
+			                 out.why == LeftOut::Why::kDuplicate ? "that label is there already" :
+			                                                       "all 3 buttons are taken";
+			text += std::format("; left out: {}: {}", what, why);
+		}
+		const char* name = a_ref->GetDisplayFullName();
+		logger::info("Several rules on {} ({:08X}): {}", name ? name : "?", a_ref->GetFormID(), text);
 	}
 }

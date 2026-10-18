@@ -486,10 +486,11 @@ namespace
 		const double buttonX = Number(button, "_x");
 		const double firstLineX = GetLine(text, 0).x;
 
-		// Extra lines on top, highest slot first: "Y line\nX line\n" + "<Activate line>\n<name>"
+		// Extra lines on top, highest slot first: "Y line\nX line\n" + "<Activate line>\n<name>". The labels are prompt
+		// HTML like the Activate line itself (a theft is a red FONT tag), so they go in as they are, not escaped.
 		std::string html;
 		for (auto it = labels.rbegin(); it != labels.rend(); ++it) {
-			html += EscapeHtml(*it) + "\n";
+			html += *it + "\n";
 		}
 		html += a_name.GetString();
 		std::array<RE::GFxValue, 2> setArgs{ RE::GFxValue(html.c_str()), RE::GFxValue(true) };

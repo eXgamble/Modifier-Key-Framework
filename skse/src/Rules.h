@@ -37,7 +37,10 @@
 //
 // "requires", "not" and "alternate" are optional. Every condition in "requires" must hold, none in
 // "not" may. A form condition can list several forms: any one of them counts. When several rules
-// match, the highest priority wins.
+// match (1.6.0), they share the target: the highest priority's primary is the Activate action, and the modifier actions
+// of all of them are merged onto the buttons, highest priority first (up to 3; a label already there shows once). Rule
+// format 7: "exclusive": true, a rule that shares with no other (when it's on top only its actions show; below another
+// rule it's left out).
 namespace Rules
 {
 	enum class Target
@@ -176,6 +179,40 @@ namespace Rules
 		std::vector<Action>   alternates;  // modifier actions in button order: Activate, slot 2, slot 3 (0-3 of them)
 		EnabledFlag           enabled;  // "enabled" in JSON (default true), then Papyrus
 		bool                  enabledInFile = true;  // "enabled" in JSON: what each load goes back to
+		bool                  exclusive = false;  // format 7: shares the target with no other rule
+	};
+
+	// One modifier action on a target: the rule it comes from and its place there (1-3), the number its mod event carries
+	// whichever button it lands on
+	struct Slot
+	{
+		const Rule*   rule = nullptr;
+		const Action* action = nullptr;
+		std::int32_t  index = 0;
+	};
+
+	// A matching rule's action (or, with no action, the whole rule) that didn't make it onto the target, for the log
+	struct LeftOut
+	{
+		enum class Why
+		{
+			kExclusive,  // the top rule or this one shares with no other
+			kDuplicate,  // a modifier action with the same label is there already
+			kFull        // all 3 buttons are taken
+		};
+
+		const Rule*   rule = nullptr;
+		const Action* action = nullptr;
+		Why           why = Why::kFull;
+	};
+
+	// What a target offers right now: the top rule (the highest-priority match: its primary is the Activate action, its
+	// "info" applies) and the modifier actions of every matching rule merged, in button order.
+	struct Resolved
+	{
+		const Rule*          top = nullptr;
+		std::vector<Slot>    alternates;
+		std::vector<LeftOut> leftOut;
 	};
 
 	// A "$Key" from the framework's own or a rule file's translation file, or a_fallback
@@ -191,9 +228,9 @@ namespace Rules
 	// are case-insensitive: the game may hand over a differently cased copy), or nullptr
 	Rule* Find(std::string_view a_file, std::string_view a_id);
 
-	// The highest-priority rule the reference matches (an NPC rule for an actor, an object rule for anything else), or
-	// nullptr.
-	const Rule* Match(RE::TESObjectREFR* a_ref);
+	// The rules the reference matches (NPC rules for an actor, object rules for anything else), put together: the top
+	// rule and the merged modifier actions. No match: top is nullptr.
+	Resolved Resolve(RE::TESObjectREFR* a_ref);
 
 	// Is there any rule for objects (a quick way out for the object hooks)
 	bool HasObjectRules();
@@ -209,7 +246,7 @@ namespace Rules
 	// documented contract: mods set them again on every load), so one save's switch must not carry into the next.
 	void ResetEnabled();
 
-	// Logs (once per pair) each rule from another file that also matches the actor but lost to
-	// a_winner. Called on activation only, not for every prompt update.
-	void ReportConflicts(RE::TESObjectREFR* a_ref, const Rule* a_winner);
+	// Logs (once per combination of rules) how a target's actions were put together from several rules: the buttons and
+	// what was left out. Called on activation only, not for every prompt update.
+	void ReportMerge(RE::TESObjectREFR* a_ref, const Resolved& a_resolved);
 }

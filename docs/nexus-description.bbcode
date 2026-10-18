@@ -67,7 +67,7 @@ Activating sends an SKSE mod event to your script, with the target (the NPC or o
 [*][b]Keep the vanilla text:[/b] a [b]primary[/b] without a label keeps the game's own prompt ([i]Search[/i] on a dead body, [i]Talk[/i]), in the player's language. [i]"primary": {}[/i] keeps the activation fully vanilla.
 [*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat, offers a dialogue topic, in an interior. Lists mean "any of these", and a [b]not[/b] block excludes.
 [*][b]Optional mods welcome:[/b] a form from a plugin that isn't installed is simply ignored.
-[*][b]Priorities with a conflict log:[/b] when two mods want the same NPC, the higher priority wins and brings all its actions, ties are always resolved the same way (never by install order), and the log says who won and who lost.
+[*][b]Several mods on one target (1.6.0):[/b] their actions share the buttons instead of one mod hiding the other. The highest priority gives the normal action, and every mod's modifier actions go onto A, X and Y in priority order (a merchant gets [i]Buy / Sell[/i] from one mod and [i]Pickpocket[/i] from another). Ties always resolve the same way (never by install order), the log shows what went where, and a rule that must be alone can say [i]"exclusive": true[/i].
 [*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
 [*][b]Papyrus API:[/b] version, is the key held, and switch your rules on or off at runtime (e.g. from your MCM).
 [*][b]Label only:[/b] leave out the event and only the label changes; activation stays vanilla.
@@ -83,7 +83,7 @@ Full documentation, a complete example mod and a [b]Coming from Dynamic Activati
 [*][b]The name stays on the prompt:[/b] [i]Search[/i] above [i]Lydia[/i], like vanilla, where a DAK action shows only [i]Search[/i].
 [*][b]Players can see that more actions exist:[/b] the modifier key's button on the prompt. DAK gives no hint at all.
 [*][b]Up to four actions per target[/b], each on its own button, the same layout for every mod.
-[*][b]Two mods on one target[/b] are resolved by priority, deterministically, and logged.
+[*][b]Two mods on one target[/b] both keep their actions: merged onto the buttons by priority, and logged.
 [*]DAK still has the Creation Kit's full condition set and works on any kind of object (this framework: NPCs, items, books, doors, containers). For conditions this framework doesn't have, give the NPC a keyword, faction or token item (SPID, KID, script) and require that.
 [/list]
 
