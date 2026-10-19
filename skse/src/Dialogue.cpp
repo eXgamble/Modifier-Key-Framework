@@ -207,6 +207,7 @@ namespace
 		bool                       chosen = false;
 		int                        tries = 0;
 		bool                       closing = false;
+		bool                       hidden = false;
 		{
 			std::lock_guard guard(lock);
 			if (pending && pending->closingSince) {
@@ -214,6 +215,7 @@ namespace
 			} else if (!pending || !pending->openedMenu.empty()) {
 				return false;  // over, or the topic's menu is open: the menu sink takes it from here
 			} else {
+				hidden = pending->endDialogue;
 				chosen = pending->chosen;
 				tries = ++pending->tries;
 				topics = pending->topics;
@@ -223,7 +225,9 @@ namespace
 		if (closing) {
 			return CloseTick();
 		}
-		SetMenuVisible(false);
+		if (hidden) {
+			SetMenuVisible(false);
+		}
 		if (!chosen) {
 			if (const auto index = FindTopic(topics, actor)) {
 				{
@@ -310,17 +314,19 @@ namespace
 			if (name == RE::DialogueMenu::MENU_NAME) {
 				if (a_event->opening) {
 					bool want;
+					bool hide;
 					{
 						std::lock_guard guard(lock);
 						if (pending && std::chrono::steady_clock::now() - pending->at > kOpenWithin) {
 							pending.reset();  // a conversation long after the action: not the one it started
 						}
 						want = pending && !pending->chosen;
+						hide = want && pending->endDialogue;  // without endDialogue the player stays: the menu shows
 					}
 					// the menu's own callbacks and its visibility: on the UI's turn
-					SKSE::GetTaskInterface()->AddUITask([want] {
+					SKSE::GetTaskInterface()->AddUITask([hide] {
 						FindCallback();
-						if (want) {
+						if (hide) {
 							SetMenuVisible(false);
 						}
 					});
