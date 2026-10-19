@@ -13,6 +13,9 @@ namespace
 		int                                   tries = 0;       // looks at the topic list so far
 		bool                                  talked = false;  // the NPC started the topic's line
 		std::optional<std::chrono::steady_clock::time_point> quietSince;  // the NPC stopped talking
+		std::optional<std::chrono::steady_clock::time_point> closingSince;  // endDialogue: the topic's menu closed
+		int                                                  closeTries = 0;  // onCancelPress calls so far
+		bool                                                 reshown = false;  // the game showed the list again
 	};
 
 	// The conversation must open this soon after the action, or the pick is dropped (the NPC was busy, ...).
@@ -25,6 +28,10 @@ namespace
 	constexpr int  kMaxTicks = 300;
 	constexpr auto kQuietFor = std::chrono::seconds(2);
 	constexpr auto kNoLineFor = std::chrono::seconds(5);
+	// endDialogue: the close is asked again every kCloseRetry while the conversation stays open, and forced after
+	// kCloseTries asks (no goodbye then). The menu stays hidden meanwhile.
+	constexpr auto kCloseRetry = std::chrono::seconds(1);
+	constexpr int  kCloseTries = 3;
 
 	std::mutex             lock;
 	std::optional<Pending> pending;
@@ -119,17 +126,53 @@ namespace
 	// Ends the conversation the way the player's Tab does (the movie's own onCancelPress: the list fades out, then the
 	// game closes the menu), so the NPC says goodbye. Kept out of sight: the dialogue menu comes back on top when the
 	// topic's menu closes. UI's turn.
-	void CloseHidden()
+	void CloseHidden(int a_try)
 	{
 		const auto menu = Menu();
 		if (!menu || !menu->uiMovie) {
 			return;
 		}
 		SetMenuVisible(false);
-		if (!menu->uiMovie->Invoke("_root.DialogueMenu_mc.onCancelPress", nullptr, nullptr, 0)) {
-			logger::info("Dialogue: the menu has no onCancelPress, closed without a goodbye");
+		RE::GFxValue state;
+		menu->uiMovie->GetVariable(&state, "_root.DialogueMenu_mc.eMenuState");
+		logger::info("Dialogue: closing the conversation like Tab (ask {}, menu state {})", a_try, state.IsNumber() ? state.GetNumber() : -1.0);
+		if (a_try > kCloseTries || !menu->uiMovie->Invoke("_root.DialogueMenu_mc.onCancelPress", nullptr, nullptr, 0)) {
+			logger::info("Dialogue: the conversation would not close like Tab, closed without a goodbye");
 			RE::UIMessageQueue::GetSingleton()->AddMessage(RE::DialogueMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
 		}
+	}
+
+	// endDialogue, after the topic's menu closed: the conversation stays hidden until it is gone (the game shows the
+	// topic list again when the dialogue menu is back on top), and the close is asked again if it stays open. UI's
+	// turn. Returns false when there is nothing left to look at.
+	bool CloseTick()
+	{
+		const auto menu = Menu();
+		if (menu && menu->uiMovie) {
+			RE::GFxValue shown;
+			if (menu->uiMovie->GetVariable(&shown, "_root.DialogueMenu_mc.TopicListHolder._visible") && shown.IsBool() && shown.GetBool()) {
+				std::lock_guard guard(lock);
+				if (pending && !pending->reshown) {
+					pending->reshown = true;
+					logger::info("Dialogue: the game showed the topic list again while closing, hidden");
+				}
+			}
+		}
+		SetMenuVisible(false);
+		int ask = 0;
+		{
+			std::lock_guard guard(lock);
+			if (!pending || !pending->closingSince) {
+				return false;
+			}
+			if (std::chrono::steady_clock::now() - *pending->closingSince > kCloseRetry * pending->closeTries) {
+				ask = ++pending->closeTries;
+			}
+		}
+		if (ask) {
+			CloseHidden(ask);
+		}
+		return ask <= kCloseTries;
 	}
 
 	void Choose(std::uint32_t a_index)
@@ -161,17 +204,24 @@ namespace
 	{
 		std::vector<RE::TESTopic*> topics;
 		RE::ActorHandle            actor;
-		bool                       chosen;
-		int                        tries;
+		bool                       chosen = false;
+		int                        tries = 0;
+		bool                       closing = false;
 		{
 			std::lock_guard guard(lock);
-			if (!pending || !pending->openedMenu.empty()) {
+			if (pending && pending->closingSince) {
+				closing = true;
+			} else if (!pending || !pending->openedMenu.empty()) {
 				return false;  // over, or the topic's menu is open: the menu sink takes it from here
+			} else {
+				chosen = pending->chosen;
+				tries = ++pending->tries;
+				topics = pending->topics;
+				actor = pending->actor;
 			}
-			chosen = pending->chosen;
-			tries = ++pending->tries;
-			topics = pending->topics;
-			actor = pending->actor;
+		}
+		if (closing) {
+			return CloseTick();
 		}
 		SetMenuVisible(false);
 		if (!chosen) {
@@ -231,6 +281,24 @@ namespace
 		pending.reset();
 	}
 
+	// Looks at the hidden conversation every kTick on the UI's turn, until Tick has nothing left to look at, a newer
+	// round of looks starts or the conversation closes.
+	void StartLooks()
+	{
+		const int mine = ++generation;
+		// skse-lint: ok one-shot: at most kMaxTicks looks 0.1 s apart while a topic action's conversation runs
+		std::thread([mine] {
+			for (int i = 0; i < kMaxTicks && generation == mine; ++i) {
+				std::this_thread::sleep_for(kTick);  // skse-lint: ok the bounded looks above
+				SKSE::GetTaskInterface()->AddUITask([mine] {
+					if (generation == mine && !Tick()) {
+						++generation;  // nothing left to look at: the remaining looks stop
+					}
+				});
+			}
+		}).detach();
+	}
+
 	struct MenuSink : RE::BSTEventSink<RE::MenuOpenCloseEvent>
 	{
 		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
@@ -257,18 +325,7 @@ namespace
 						}
 					});
 					if (want) {
-						const int mine = ++generation;
-						// skse-lint: ok one-shot: at most kMaxTicks looks 0.1 s apart while a topic action's conversation runs
-						std::thread([mine] {
-							for (int i = 0; i < kMaxTicks && generation == mine; ++i) {
-								std::this_thread::sleep_for(kTick);  // skse-lint: ok the bounded looks above
-								SKSE::GetTaskInterface()->AddUITask([mine] {
-									if (generation == mine && !Tick()) {
-										++generation;  // nothing left to look at: the remaining looks stop
-									}
-								});
-							}
-						}).detach();
+						StartLooks();
 					}
 				} else {
 					Clear("the conversation closed");
@@ -279,7 +336,7 @@ namespace
 			}
 			// the menu the chosen topic opens, then its closing: end the conversation
 			std::lock_guard guard(lock);
-			if (!pending || !pending->chosen || name == RE::HUDMenu::MENU_NAME || name == RE::CursorMenu::MENU_NAME || name == RE::FaderMenu::MENU_NAME ||
+			if (!pending || !pending->chosen || pending->closingSince || name == RE::HUDMenu::MENU_NAME || name == RE::CursorMenu::MENU_NAME || name == RE::FaderMenu::MENU_NAME ||
 				name == RE::MessageBoxMenu::MENU_NAME || name == RE::TutorialMenu::MENU_NAME) {
 				return RE::BSEventNotifyControl::kContinue;
 			}
@@ -294,13 +351,17 @@ namespace
 				SKSE::GetTaskInterface()->AddUITask(ShowCursor);
 			} else if (!a_event->opening && name == pending->openedMenu.c_str()) {
 				if (pending->endDialogue) {
+					// hidden at once and asked to close like Tab; the looks keep it hidden until it is gone
 					logger::info("Dialogue: {} closed, the conversation ends", pending->openedMenu);
-					SKSE::GetTaskInterface()->AddUITask(CloseHidden);
+					pending->closingSince = std::chrono::steady_clock::now();
+					pending->closeTries = 1;
+					SKSE::GetTaskInterface()->AddUITask([] { CloseHidden(1); });
+					StartLooks();
 				} else {
 					logger::info("Dialogue: {} closed, the conversation shows", pending->openedMenu);
 					SKSE::GetTaskInterface()->AddUITask([] { SetMenuVisible(true); });
+					pending.reset();
 				}
-				pending.reset();
 			}
 			return RE::BSEventNotifyControl::kContinue;
 		}
