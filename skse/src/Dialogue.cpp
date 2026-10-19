@@ -343,9 +343,10 @@ namespace
 			if (a_event->opening && pending->openedMenu.empty()) {
 				// a menu the player works in (barter, training, gift, ...), not an overlay that comes and goes
 				// meanwhile (the barter menu's LoadWaitSpinner, other mods' HUD overlays). The cursor alone doesn't
-				// tell: with a gamepad the barter menu has none, so a menu that takes input counts too.
+				// tell: with a gamepad the barter and training menus have none, and the training menu has no input
+				// context either; both use the menu controls, which the spinner doesn't.
 				const auto menu = RE::UI::GetSingleton()->GetMenu(name);
-				const bool works = menu && (menu->UsesCursor() || menu->inputContext.get() != RE::IMenu::Context::kNone);
+				const bool works = menu && (menu->UsesCursor() || menu->UsesMenuContext() || menu->inputContext.get() != RE::IMenu::Context::kNone);
 				logger::info("Dialogue: {} opened (flags {:X}, input context {}): {}", name.c_str(), menu ? menu->menuFlags.underlying() : 0,
 					menu ? static_cast<int>(menu->inputContext.get()) : -1, works ? "the topic's menu" : "passing by");
 				if (!works) {
