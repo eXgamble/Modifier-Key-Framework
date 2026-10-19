@@ -311,7 +311,8 @@ if the player had chosen it. The NPC turns to the player, says the topic's line 
 line does (open the barter menu, the training menu, ...), so nothing is skipped and the NPC stays in
 the conversation. The dialogue menu never shows (1.7.0+): no topic list, no mouse cursor, only the
 line's subtitle when subtitles are on. With `"endDialogue": true` the conversation closes as soon as
-the menu the topic opened closes; without it the conversation shows then, with its topic list. If
+the menu the topic opened closes, the way the player's Tab does, so the NPC says goodbye and the
+dialogue menu stays hidden; without it the conversation shows then, with its topic list. If
 the topic never turns up, or its line opens no menu, the conversation shows and the player goes on
 by hand.
 
