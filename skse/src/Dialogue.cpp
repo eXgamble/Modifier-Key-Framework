@@ -116,6 +116,22 @@ namespace
 		return std::nullopt;
 	}
 
+	// Ends the conversation the way the player's Tab does (the movie's own onCancelPress: the list fades out, then the
+	// game closes the menu), so the NPC says goodbye. Kept out of sight: the dialogue menu comes back on top when the
+	// topic's menu closes. UI's turn.
+	void CloseHidden()
+	{
+		const auto menu = Menu();
+		if (!menu || !menu->uiMovie) {
+			return;
+		}
+		SetMenuVisible(false);
+		if (!menu->uiMovie->Invoke("_root.DialogueMenu_mc.onCancelPress", nullptr, nullptr, 0)) {
+			logger::info("Dialogue: the menu has no onCancelPress, closed without a goodbye");
+			RE::UIMessageQueue::GetSingleton()->AddMessage(RE::DialogueMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+		}
+	}
+
 	void Choose(std::uint32_t a_index)
 	{
 		const auto menu = Menu();
@@ -279,7 +295,7 @@ namespace
 			} else if (!a_event->opening && name == pending->openedMenu.c_str()) {
 				if (pending->endDialogue) {
 					logger::info("Dialogue: {} closed, the conversation ends", pending->openedMenu);
-					RE::UIMessageQueue::GetSingleton()->AddMessage(RE::DialogueMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+					SKSE::GetTaskInterface()->AddUITask(CloseHidden);
 				} else {
 					logger::info("Dialogue: {} closed, the conversation shows", pending->openedMenu);
 					SKSE::GetTaskInterface()->AddUITask([] { SetMenuVisible(true); });

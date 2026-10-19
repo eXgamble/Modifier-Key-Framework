@@ -4,7 +4,8 @@
 // the first listed topic the NPC offers, as if the player had chosen it (the NPC turns to the player and says the
 // topic's line, then e.g. opens the barter menu). The dialogue menu stays hidden meanwhile: the player sees the NPC
 // turn and speak, then the menu. With "endDialogue", the conversation closes when the menu that topic opened (barter,
-// training, gift, ...) closes; without it, the conversation shows then. If the topic never shows up or opens no
+// training, gift, ...) closes, the way Tab does (the NPC says goodbye, the dialogue menu stays hidden); without it,
+// the conversation shows then. If the topic never shows up or opens no
 // menu, the conversation shows and the player goes on by hand.
 namespace Dialogue
 {
