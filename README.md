@@ -309,8 +309,11 @@ Format `4` (framework 1.3.0+). An action can name dialogue topics (`DIAL` record
 event: activating starts the real conversation and picks the first listed topic the NPC offers, as
 if the player had chosen it. The NPC turns to the player, says the topic's line and does what that
 line does (open the barter menu, the training menu, ...), so nothing is skipped and the NPC stays in
-the conversation. With `"endDialogue": true` the conversation closes as soon as the menu the topic
-opened closes, instead of going back to the topic list.
+the conversation. The dialogue menu never shows (1.7.0+): no topic list, no mouse cursor, only the
+line's subtitle when subtitles are on. With `"endDialogue": true` the conversation closes as soon as
+the menu the topic opened closes; without it the conversation shows then, with its topic list. If
+the topic never turns up, or its line opens no menu, the conversation shows and the player goes on
+by hand.
 
 ```jsonc
 {
