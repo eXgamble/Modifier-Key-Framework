@@ -393,12 +393,36 @@ namespace
 			SetIn(field, "autoSize", RE::GFxValue("left"));
 			FollowHudModes(field, a_button);
 		}
-		// the prompt's own font (face, size, colour): the first FONT tag of its HTML
+		// the prompt's own font (face, size): the first FONT tag of its HTML. Its colour comes from the last FONT tag (the
+		// name line): the first run is the action word, red for a theft ("Steal", or an owned item's label), and the
+		// separator keeps the prompt's normal colour (found 2026-10-23)
 		const auto html = HtmlOf(a_text);
 		const auto start = html.find("<FONT");
 		const auto end = start == std::string::npos ? std::string::npos : html.find('>', start);
 		const auto separator = EscapeHtml(Settings::ModifierSeparator());
-		const auto text = end == std::string::npos ? separator : html.substr(start, end - start + 1) + separator + "</FONT>";
+		std::string text = separator;
+		if (end != std::string::npos) {
+			auto       tag = html.substr(start, end - start + 1);
+			const auto colorOf = [](const std::string& a_tag) -> std::optional<std::pair<std::size_t, std::size_t>> {
+				const auto at = a_tag.find("COLOR=\"");
+				const auto close = at == std::string::npos ? std::string::npos : a_tag.find('"', at + 7);
+				if (close == std::string::npos) {
+					return std::nullopt;
+				}
+				return std::pair{ at + 7, close };
+			};
+			const auto lastStart = html.rfind("<FONT");
+			const auto lastEnd = html.find('>', lastStart);
+			if (lastStart != start && lastEnd != std::string::npos) {
+				const auto last = html.substr(lastStart, lastEnd - lastStart + 1);
+				const auto mine = colorOf(tag);
+				const auto normal = colorOf(last);
+				if (mine && normal) {
+					tag.replace(mine->first, mine->second - mine->first, last.substr(normal->first, normal->second - normal->first));
+				}
+			}
+			text = tag + separator + "</FONT>";
+		}
 		SetIn(field, "htmlText", RE::GFxValue(text.c_str()));
 		return field;
 	}
