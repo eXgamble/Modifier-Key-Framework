@@ -128,6 +128,7 @@ namespace Rules
 		std::vector<RE::TESRace*>        races;
 		std::vector<RE::TESNPC*>         npcs;
 		std::vector<RE::TESTopic*>       topics;
+		std::vector<RE::EffectSetting*>  magicEffects;  // under one of these effects (format 8)
 		std::optional<bool>              alive;
 		std::optional<bool>              teammate;
 		std::optional<bool>              essential;
@@ -138,6 +139,8 @@ namespace Rules
 		std::optional<bool>              sleeping;
 		std::optional<bool>              inCombat;
 		std::optional<bool>              knockedDown;  // knocked down, ragdolled or paralyzed (format 8)
+		std::optional<bool>              child;  // format 8
+		std::optional<bool>              detectsPlayer;  // format 8
 		// object targets (format 5)
 		std::uint32_t                    types = 0;  // ObjectType bits, 0 = any
 		std::vector<RE::TESBoundObject*> bases;
@@ -154,6 +157,7 @@ namespace Rules
 		std::optional<bool>              interior;  // the target is in an interior cell
 		std::optional<bool>              playerHasWeapon;  // a weapon in either hand (format 8; a staff doesn't count)
 		std::optional<bool>              playerInCombat;   // format 8
+		std::vector<RE::BGSKeyword*>     playerKeywords;   // the player (or their race) has one of these (format 8)
 	};
 
 	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)

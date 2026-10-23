@@ -18,7 +18,8 @@ namespace
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
 	// 6 (1.5.0): "info": "none" (nothing below the name line).
 	// 7 (1.6.0): "exclusive" (a rule that shares the target with no other; since 1.6.0 matching rules are merged).
-	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon", "playerInCombat" and "knockedDown" conditions.
+	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon", "playerInCombat", "knockedDown", "playerKeyword", "child",
+	//    "magicEffect" and "detectsPlayer" conditions.
 	constexpr std::int32_t RULE_FORMAT_VERSION = 8;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
@@ -167,6 +168,8 @@ namespace
 			{ "sleeping", &Rules::Conditions::sleeping },
 			{ "inCombat", &Rules::Conditions::inCombat },
 			{ "knockedDown", &Rules::Conditions::knockedDown },
+			{ "child", &Rules::Conditions::child },
+			{ "detectsPlayer", &Rules::Conditions::detectsPlayer },
 			{ "read", &Rules::Conditions::read },
 			{ "spellTome", &Rules::Conditions::spellTome },
 			{ "locked", &Rules::Conditions::locked },
@@ -181,7 +184,7 @@ namespace
 		};
 		// which target each condition is for (the rest work for both)
 		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
-			"bleedingOut", "unconscious", "sitting", "sleeping", "inCombat", "knockedDown" };
+			"bleedingOut", "unconscious", "sitting", "sleeping", "inCombat", "knockedDown", "child", "magicEffect", "detectsPlayer" };
 		constexpr std::string_view objectOnly[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
 			"playerHasKey", "owned", "takeable" };
 		constexpr std::string_view format5[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
@@ -191,7 +194,9 @@ namespace
 			if (std::ranges::contains(format5, key) && currentVersion < 5) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 5", key) };
 			}
-			if ((key == "playerHasWeapon" || key == "playerInCombat" || key == "knockedDown") && currentVersion < 8) {
+			constexpr std::string_view format8[] = { "playerHasWeapon", "playerInCombat", "knockedDown", "playerKeyword", "child", "magicEffect",
+				"detectsPlayer" };
+			if (std::ranges::contains(format8, key) && currentVersion < 8) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 8", key) };
 			}
 			if (a_target == Rules::Target::kObject && std::ranges::contains(npcOnly, key)) {
@@ -213,6 +218,12 @@ namespace
 			} else if (key == "keyword") {
 				ReadForms(value, key, "a keyword", conditions.keywords);
 				requireSome(conditions.keywords.size());
+			} else if (key == "playerKeyword") {
+				ReadForms(value, key, "a keyword", conditions.playerKeywords);
+				requireSome(conditions.playerKeywords.size());
+			} else if (key == "magicEffect") {
+				ReadForms(value, key, "a magic effect", conditions.magicEffects);
+				requireSome(conditions.magicEffects.size());
 			} else if (key == "faction") {
 				ReadFactions(value, conditions.factions);
 				requireSome(conditions.factions.size());
@@ -650,6 +661,11 @@ namespace
 			[&] { return flag(a_conditions.playerSneaking, [&] { return RE::PlayerCharacter::GetSingleton()->IsSneaking(); }); },
 			[&] { return flag(a_conditions.interior, [&] { const auto cell = a_ref->GetParentCell(); return cell && cell->IsInteriorCell(); }); },
 			[&] { return flag(a_conditions.playerHasWeapon, PlayerHasWeapon); },
+			[&] { return anyOf(a_conditions.playerKeywords, [&](RE::BGSKeyword* a_keyword) {
+					  const auto player = RE::PlayerCharacter::GetSingleton();
+					  const auto race = player->GetRace();
+					  return player->HasKeyword(a_keyword) || (race && race->HasKeyword(a_keyword));
+				  }); },
 			[&] { return flag(a_conditions.playerInCombat, [&] { return RE::PlayerCharacter::GetSingleton()->IsInCombat(); }); },
 			[&] { return flag(a_conditions.alive, [&] { return !actor->IsDead(); }); },
 			[&] { return flag(a_conditions.teammate, [&] { return actor->IsPlayerTeammate(); }); },
@@ -666,6 +682,7 @@ namespace
 					  return (state && state->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal) ||
 				             actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kParalysis) > 0.0f;
 				  }); },
+			[&] { return flag(a_conditions.child, [&] { return actor->IsChild(); }); },
 			[&] { return anyOf(a_conditions.npcs, [&](RE::TESNPC* a_npc) { return actor->GetActorBase() == a_npc || actor->GetTemplateBase() == a_npc; }); },
 			[&] { return anyOf(a_conditions.races, [&](RE::TESRace* a_race) { return actor->GetRace() == a_race; }); },
 			[&] { return anyOf(a_conditions.keywords, [&](RE::BGSKeyword* a_keyword) {
@@ -684,6 +701,14 @@ namespace
 			[&] { return flag(a_conditions.owned, [&] { return a_ref->IsCrimeToActivate(); }); },
 			[&] { return anyOf(a_conditions.items, [&](RE::TESBoundObject* a_item) { return a_inventory.Carries(a_item); }); },
 			[&] { return anyOf(a_conditions.topics, [&](RE::TESTopic* a_topic) { return Dialogue::Offers(actor, a_topic); }); },
+			[&] { return anyOf(a_conditions.magicEffects, [&](RE::EffectSetting* a_effect) {
+					  const auto target = actor->AsMagicTarget();
+					  return target && target->HasMagicEffect(a_effect);
+				  }); },
+			// the game's own detection test, the dearest here: last, and only reached by rules whose cheaper tests held
+			[&] { return flag(a_conditions.detectsPlayer, [&] {
+					  return actor->RequestDetectionLevel(RE::PlayerCharacter::GetSingleton(), RE::DETECTION_PRIORITY::kNormal) > 0;
+				  }); },
 		};
 
 		for (const auto& test : tests) {

@@ -59,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type, `playerHasWeapon`, `playerInCombat` and `knockedDown`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type, `playerHasWeapon`, `playerInCombat`, `knockedDown`, `playerKeyword`, `child`, `magicEffect` and `detectsPlayer`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -103,6 +103,9 @@ which means *any one of them*.
 | `sleeping` | is asleep in a bed |
 | `inCombat` | is in combat |
 | `knockedDown` | is knocked down, ragdolled or paralyzed (format `8`): e.g. thrown by a shout, paralyzed by a spell, or downed by a mod that doesn't use the game's bleedout |
+| `child` | is a child (format `8`) |
+| `magicEffect` | is under one of these magic effects, `"Plugin.esp\|0xID"` or a list (format `8`) |
+| `detectsPlayer` | detects the player, by the game's own detection (format `8`). The costliest condition: checked last, after the rest of the rule holds |
 | `topic` | offers the dialogue topic right now (format `4`): its quest runs and one of its lines passes its conditions, e.g. a merchant whose shop is open (see [Dialogue topics](#dialogue-topics)) |
 
 The `true`/`false` conditions compare with the value given: `"teammate": false` in `requires`
@@ -245,6 +248,7 @@ keys, soul gems, doors and containers. Object rules use their own conditions:
 | `interior` | is in an interior cell (NPC rules can use this one too) |
 | `playerHasWeapon` | the player holds a weapon in either hand, one a poison can go on (a staff doesn't count; format `8`, NPC rules can use this one too) |
 | `playerInCombat` | the player is in combat (format `8`, NPC rules can use this one too) |
+| `playerKeyword` | the player, or the player's race, has one of these keywords: e.g. `"Skyrim.esm\|0xA82BB"` (Vampire) (format `8`, NPC rules can use this one too) |
 
 Instead of an `event`, an action can `"do"` one of the game's own things:
 
