@@ -62,12 +62,14 @@ Activating sends an SKSE mod event to your script, with the target (the NPC or o
 [code]Event OnMyAction(String asEventName, String asRuleId, Float afAction, Form akTarget)[/code]
 [list]
 [*][b]One alternate or a list:[/b] [i]"alternate": { ... }[/i] for a single modifier action, or a list of up to three in order of importance (rule format 3). The framework gives out the buttons.
-[*][b]Objects (1.4.0):[/b] rules for books, items, doors and containers in the world, with their own conditions (kind, read, owned, locked, has the key, where a door leads, ...) and the game's own actions without a script: take, equip, equip and draw, use (drink, eat, apply), or the vanilla activation. Taking that would be a crime shows red, like the game's own "Steal". An action can show, in place of a lock's level, how the people behind the target feel about you (Friend, Enemy, ..., or your own words per rank), or (1.5.0) nothing at all.
+[*][b]Objects (1.4.0):[/b] rules for books, items, doors and containers in the world, with their own conditions (kind, read, owned, locked, has the key, where a door leads, ...) and the game's own actions without a script: take, equip, equip and draw, use (drink, eat, apply), or the vanilla activation. Drinks (ale, mead, wine) are their own kind (1.8.0), so they can say [i]Drink[/i] while food says [i]Eat[/i]. Taking that would be a crime shows red, like the game's own "Steal". An action can show, in place of a lock's level, how the people behind the target feel about you (Friend, Enemy, ..., or your own words per rank), or (1.5.0) nothing at all.
 [*][b]Dialogue topics (1.3.0):[/b] instead of an event, an action can pick a dialogue topic: the conversation starts the vanilla way and the topic is chosen for the player, so the NPC says their line and stays with you (e.g. [i]Buy / Sell[/i] that plays "What have you got for sale?" and opens the barter menu). With [i]"endDialogue": true[/i] (1.7.0+) the dialogue menu never shows, only the line's subtitle, and the conversation closes when that menu closes, with the NPC's goodbye. Such an action only shows while the NPC offers the topic.
 [*][b]Keep the vanilla text:[/b] a [b]primary[/b] without a label keeps the game's own prompt ([i]Search[/i] on a dead body, [i]Talk[/i]), in the player's language. [i]"primary": {}[/i] keeps the activation fully vanilla.
-[*][b]Conditions:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat, offers a dialogue topic, in an interior. Lists mean "any of these", and a [b]not[/b] block excludes.
+[*][b]Conditions on the target:[/b] item, keyword, faction (with minimum rank), race, specific NPC, alive, teammate, essential, protected, bleeding out, unconscious, sitting, sleeping, in combat, offers a dialogue topic, in an interior, and (1.8.0) knocked down or paralyzed, a child, under a magic effect, detects the player. Lists mean "any of these", and a [b]not[/b] block excludes.
+[*][b]Conditions on the player (1.8.0):[/b] sneaking, in combat, holding a weapon, and has a keyword (on the player or their race: a rule only a vampire or a werewolf gets).
+[*][b]Always up to date (1.8.0):[/b] the prompt changes on screen as soon as its conditions do, while you keep looking: after reading a book, equipping a weapon, giving or taking an item, a death, a fight starting or ending.
 [*][b]Optional mods welcome:[/b] a form from a plugin that isn't installed is simply ignored.
-[*][b]Several mods on one target (1.6.0):[/b] their actions share the buttons instead of one mod hiding the other. The highest priority gives the normal action, and every mod's modifier actions go onto A, X and Y in priority order (a merchant gets [i]Buy / Sell[/i] from one mod and [i]Pickpocket[/i] from another). Ties always resolve the same way (never by install order), the log shows what went where, and a rule that must be alone can say [i]"exclusive": true[/i].
+[*][b]Several mods on one target (1.6.0):[/b] their actions share the buttons instead of one mod hiding the other. The highest priority gives the normal action, and every mod's modifier actions go onto A, X and Y in priority order (a merchant gets [i]Buy / Sell[/i] from one mod and [i]Pickpocket[/i] from another). Ties always resolve the same way (never by install order), the log shows what went where, and a rule that must be alone can say [i]"exclusive": true[/i]. Tip: give the action most targets offer the highest priority, so it keeps its button everywhere; the GitHub page has the numbers the mods below use.
 [*][b]Translations:[/b] labels can be [i]$Keys[/i] from your usual translation files.
 [*][b]Papyrus API:[/b] version, is the key held, and switch your rules on or off at runtime (e.g. from your MCM).
 [*][b]Label only:[/b] leave out the event and only the label changes; activation stays vanilla.
@@ -102,6 +104,13 @@ Full documentation, a complete example mod and a [b]Coming from Dynamic Activati
 [size=5][b]Mods using this framework[/b][/size]
 [list]
 [*][url=https://www.nexusmods.com/skyrimspecialedition/mods/193403]Death Timer - Immersive Bleedout[/url]: Give Potion / Search on dying followers and NPCs.
+[*][url=https://github.com/eXgamble/MKF-Followers-and-Horses]MKF - Followers and Horses[/url]: your follower's and your horse's inventory, potions for followers in a fight, Flee / Fight for your horse.
+[*][url=https://github.com/eXgamble/MKF-Merchants-and-Trainers]MKF - Merchants and Trainers[/url]: Buy / Sell and Pay For Training straight away.
+[*][url=https://github.com/eXgamble/MKF-Read-Or-Take]MKF - Read Or Take[/url]: read or take a book.
+[*][url=https://github.com/eXgamble/MKF-Use-Or-Take]MKF - Use Or Take[/url]: equip, drink, eat or apply an item without picking it up first.
+[*][url=https://github.com/eXgamble/MKF-Simply-Knock]MKF - Simply Knock[/url]: knock on a locked house door (Simply Knock SE).
+[*][url=https://github.com/eXgamble/MKF-Simple-Hunting-Overhaul]MKF - Simple Hunting Overhaul[/url]: Pick Up Carcass on a dead animal.
+[*]MKF - Vampire: Feed on sleeping, seduced, helpless or unaware people.
 [/list]
 
 [size=5][b]Permissions and source[/b][/size]

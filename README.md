@@ -108,8 +108,24 @@ which means *any one of them*.
 | `detectsPlayer` | detects the player, by the game's own detection (format `8`). The costliest condition: checked last, after the rest of the rule holds |
 | `topic` | offers the dialogue topic right now (format `4`): its quest runs and one of its lines passes its conditions, e.g. a merchant whose shop is open (see [Dialogue topics](#dialogue-topics)) |
 
+About the player and the place, for NPC and [object](#objects) rules alike:
+
+| Condition | Holds when… |
+|---|---|
+| `playerSneaking` | the player is sneaking (format `5`) |
+| `playerInCombat` | the player is in combat (format `8`) |
+| `playerHasWeapon` | the player holds a weapon in either hand, one a poison can go on (a staff doesn't count; format `8`) |
+| `playerKeyword` | the player, or the player's race, has one of these keywords: e.g. `"Skyrim.esm\|0xA82BB"` (Vampire), for a rule only a vampire, a werewolf or a race of your own should get (format `8`) |
+| `interior` | the target is in an interior cell (format `5`) |
+
 The `true`/`false` conditions compare with the value given: `"teammate": false` in `requires`
 means *not* a teammate.
+
+**The prompt keeps up with the conditions** (1.8.0): it's rebuilt when the modifier key goes down or up, when the
+crosshair lands on a new target, and also, while you keep looking at the same one, when a menu closes (a book read,
+an inventory change, a barter), when the player equips or unequips something, when the target gains or loses an item
+or dies, and when anyone's combat state changes. So rules on `read`, `item`, `alive`, `playerHasWeapon`,
+`inCombat` or `playerInCombat` switch on screen as the state changes, without looking away and back.
 
 For anything the list doesn't cover, give the NPC a keyword, faction or token item from your own
 plugin (with SPID, KID or a script) and require that.
@@ -128,9 +144,10 @@ Since 1.6.0 rules from several mods share a target instead of one taking it over
 
 - **Activate** (the primary) comes from the matching rule with the highest `priority`.
 - **The modifier actions** of every matching rule go onto the buttons together, highest priority
-  first, each rule's own in its order: up to 3 (A, X, Y). A merchant that eXrim can pickpocket and
-  Merchants and Trainers can trade with gets `[A] Buy / Sell` and `[X] Pickpocket`. An action whose
-  label is already there shows once; actions past the third are left out.
+  first, each rule's own in its order: up to 3 (A, X, Y). A vampire who sneaks up on a merchant
+  unseen, with MKF - Vampire (Feed, priority 1) and MKF - Merchants and Trainers (Buy / Sell,
+  priority 0), gets `[A] Feed` and `[X] Buy / Sell`. An action whose label is already there shows once; actions past the
+  third are left out.
 - Each action still sends its own mod's event with its own number (`afAction`: its place in its own
   rule), whichever button it lands on, so scripts don't change.
 - `"exclusive": true` (format `7`) keeps a target to one rule: on top, only its actions show; below
@@ -139,6 +156,14 @@ Since 1.6.0 rules from several mods share a target instead of one taking it over
 
 On a tie in `priority`, the rule from the file whose name sorts first comes first (alphabetical,
 ignoring case), then the one listed first in that file. The result never depends on install order.
+
+**Choosing a priority:** players learn buttons, so an action that most targets offer should keep the same
+button everywhere. Give the action that shows on the most targets the highest priority, and actions for a
+few targets (a merchant's Buy / Sell, a trainer's training) a lower one, so they take the next buttons.
+The exception is an urgent moment, such as a downed NPC who must be healed now: rank it above everything,
+or make it `"exclusive"`. The mods built on the framework so far use 0 for role actions (Merchants and
+Trainers), 1 for everyday ones (Feed for a vampire), 10 for followers and horses, 50 for a downed NPC
+(Death Timer). Pick a number nobody else around it uses, rather than relying on the tie rule.
 
 The log helps sort out overlaps between mods:
 
@@ -244,11 +269,9 @@ keys, soul gems, doors and containers. Object rules use their own conditions:
 | `requiresKey` | is locked and can only be opened with its key |
 | `playerHasKey` | is locked and the player carries its key |
 | `destinationKeyword` | is a door whose other side is in a location with this keyword (e.g. `LocTypeHouse`) |
-| `playerSneaking` | the player is sneaking (NPC rules can use this one too) |
-| `interior` | is in an interior cell (NPC rules can use this one too) |
-| `playerHasWeapon` | the player holds a weapon in either hand, one a poison can go on (a staff doesn't count; format `8`, NPC rules can use this one too) |
-| `playerInCombat` | the player is in combat (format `8`, NPC rules can use this one too) |
-| `playerKeyword` | the player, or the player's race, has one of these keywords: e.g. `"Skyrim.esm\|0xA82BB"` (Vampire) (format `8`, NPC rules can use this one too) |
+
+Object rules can also use the [conditions about the player and the place](#conditions): `playerSneaking`,
+`playerInCombat`, `playerHasWeapon`, `playerKeyword`, `interior`.
 
 Instead of an `event`, an action can `"do"` one of the game's own things:
 
