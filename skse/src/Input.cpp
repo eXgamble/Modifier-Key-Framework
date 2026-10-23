@@ -38,11 +38,24 @@ namespace
 	// target's or the player's state goes stale while the player keeps looking at it: reading a book that's still
 	// under the crosshair left "Read" up where Read Or Take's read-book rule says "Take" (found 2026-10-22), and
 	// "playerHasWeapon" changes with what the player equips. Rebuilt when a menu closes (a book, the inventory,
-	// favorites) and when the player equips or unequips something (hotkeys equip without a menu).
+	// favorites), when the player equips or unequips something (hotkeys equip without a menu), and when the target
+	// under the crosshair gains or loses an item or dies (an "item" or "alive" rule: Death Timer's Give Potion takes
+	// the downed token away, and the NPC got up still showing "Give Potion", found 2026-10-22).
 	class StateSink :
 		public RE::BSTEventSink<RE::MenuOpenCloseEvent>,
-		public RE::BSTEventSink<RE::TESEquipEvent>
+		public RE::BSTEventSink<RE::TESEquipEvent>,
+		public RE::BSTEventSink<RE::TESContainerChangedEvent>,
+		public RE::BSTEventSink<RE::TESDeathEvent>
 	{
+		// The FormID of what the crosshair is on (0: nothing)
+		static RE::FormID CrosshairTarget()
+		{
+			const auto pick = RE::CrosshairPickData::GetSingleton();
+			const auto target = pick ? pick->GetActiveTarget().get() : nullptr;
+			return target ? target->GetFormID() : 0;
+		}
+
+	public:
 	public:
 		static StateSink* GetSingleton()
 		{
@@ -61,6 +74,25 @@ namespace
 		RE::BSEventNotifyControl ProcessEvent(const RE::TESEquipEvent* a_event, RE::BSTEventSource<RE::TESEquipEvent>*) override
 		{
 			if (a_event && a_event->actor && a_event->actor->IsPlayerRef()) {
+				QueueRefreshOnce();
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESContainerChangedEvent* a_event, RE::BSTEventSource<RE::TESContainerChangedEvent>*) override
+		{
+			if (a_event) {
+				const auto target = CrosshairTarget();
+				if (target != 0 && (a_event->oldContainer == target || a_event->newContainer == target)) {
+					QueueRefreshOnce();
+				}
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESDeathEvent* a_event, RE::BSTEventSource<RE::TESDeathEvent>*) override
+		{
+			if (a_event && a_event->actorDying && a_event->actorDying->GetFormID() == CrosshairTarget()) {
 				QueueRefreshOnce();
 			}
 			return RE::BSEventNotifyControl::kContinue;
@@ -132,6 +164,8 @@ namespace Input
 		}
 		if (const auto events = RE::ScriptEventSourceHolder::GetSingleton()) {
 			events->AddEventSink<RE::TESEquipEvent>(StateSink::GetSingleton());
+			events->AddEventSink<RE::TESContainerChangedEvent>(StateSink::GetSingleton());
+			events->AddEventSink<RE::TESDeathEvent>(StateSink::GetSingleton());
 		}
 	}
 
