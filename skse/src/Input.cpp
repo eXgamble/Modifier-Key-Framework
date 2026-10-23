@@ -40,12 +40,14 @@ namespace
 	// "playerHasWeapon" changes with what the player equips. Rebuilt when a menu closes (a book, the inventory,
 	// favorites), when the player equips or unequips something (hotkeys equip without a menu), and when the target
 	// under the crosshair gains or loses an item or dies (an "item" or "alive" rule: Death Timer's Give Potion takes
-	// the downed token away, and the NPC got up still showing "Give Potion", found 2026-10-22).
+	// the downed token away, and the NPC got up still showing "Give Potion", found 2026-10-22), and when anyone's
+	// combat state changes while the crosshair is on an NPC ("inCombat" and "playerInCombat" rules).
 	class StateSink :
 		public RE::BSTEventSink<RE::MenuOpenCloseEvent>,
 		public RE::BSTEventSink<RE::TESEquipEvent>,
 		public RE::BSTEventSink<RE::TESContainerChangedEvent>,
-		public RE::BSTEventSink<RE::TESDeathEvent>
+		public RE::BSTEventSink<RE::TESDeathEvent>,
+		public RE::BSTEventSink<RE::TESCombatEvent>
 	{
 		// The FormID of what the crosshair is on (0: nothing)
 		static RE::FormID CrosshairTarget()
@@ -55,7 +57,6 @@ namespace
 			return target ? target->GetFormID() : 0;
 		}
 
-	public:
 	public:
 		static StateSink* GetSingleton()
 		{
@@ -94,6 +95,20 @@ namespace
 		{
 			if (a_event && a_event->actorDying && a_event->actorDying->GetFormID() == CrosshairTarget()) {
 				QueueRefreshOnce();
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+
+		// The player's own combat state has no event of its own: it follows the NPCs fighting them, so any NPC's
+		// change counts while the player looks at an NPC
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESCombatEvent* a_event, RE::BSTEventSource<RE::TESCombatEvent>*) override
+		{
+			if (a_event) {
+				const auto pick = RE::CrosshairPickData::GetSingleton();
+				const auto target = pick ? pick->GetActiveTarget().get() : nullptr;
+				if (target && target->Is(RE::FormType::ActorCharacter)) {
+					QueueRefreshOnce();
+				}
 			}
 			return RE::BSEventNotifyControl::kContinue;
 		}
@@ -166,6 +181,7 @@ namespace Input
 			events->AddEventSink<RE::TESEquipEvent>(StateSink::GetSingleton());
 			events->AddEventSink<RE::TESContainerChangedEvent>(StateSink::GetSingleton());
 			events->AddEventSink<RE::TESDeathEvent>(StateSink::GetSingleton());
+			events->AddEventSink<RE::TESCombatEvent>(StateSink::GetSingleton());
 		}
 	}
 

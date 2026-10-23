@@ -153,6 +153,7 @@ namespace Rules
 		std::optional<bool>              playerSneaking;
 		std::optional<bool>              interior;  // the target is in an interior cell
 		std::optional<bool>              playerHasWeapon;  // a weapon in either hand (format 8; a staff doesn't count)
+		std::optional<bool>              playerInCombat;   // format 8
 	};
 
 	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)

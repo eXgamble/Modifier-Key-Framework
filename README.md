@@ -59,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type, `playerHasWeapon` and `knockedDown`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type, `playerHasWeapon`, `playerInCombat` and `knockedDown`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -244,6 +244,7 @@ keys, soul gems, doors and containers. Object rules use their own conditions:
 | `playerSneaking` | the player is sneaking (NPC rules can use this one too) |
 | `interior` | is in an interior cell (NPC rules can use this one too) |
 | `playerHasWeapon` | the player holds a weapon in either hand, one a poison can go on (a staff doesn't count; format `8`, NPC rules can use this one too) |
+| `playerInCombat` | the player is in combat (format `8`, NPC rules can use this one too) |
 
 Instead of an `event`, an action can `"do"` one of the game's own things:
 

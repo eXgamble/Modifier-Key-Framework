@@ -18,7 +18,7 @@ namespace
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
 	// 6 (1.5.0): "info": "none" (nothing below the name line).
 	// 7 (1.6.0): "exclusive" (a rule that shares the target with no other; since 1.6.0 matching rules are merged).
-	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon" and "knockedDown" conditions.
+	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon", "playerInCombat" and "knockedDown" conditions.
 	constexpr std::int32_t RULE_FORMAT_VERSION = 8;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
@@ -177,6 +177,7 @@ namespace
 			{ "playerSneaking", &Rules::Conditions::playerSneaking },
 			{ "interior", &Rules::Conditions::interior },
 			{ "playerHasWeapon", &Rules::Conditions::playerHasWeapon },
+			{ "playerInCombat", &Rules::Conditions::playerInCombat },
 		};
 		// which target each condition is for (the rest work for both)
 		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
@@ -190,7 +191,7 @@ namespace
 			if (std::ranges::contains(format5, key) && currentVersion < 5) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 5", key) };
 			}
-			if ((key == "playerHasWeapon" || key == "knockedDown") && currentVersion < 8) {
+			if ((key == "playerHasWeapon" || key == "playerInCombat" || key == "knockedDown") && currentVersion < 8) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 8", key) };
 			}
 			if (a_target == Rules::Target::kObject && std::ranges::contains(npcOnly, key)) {
@@ -649,6 +650,7 @@ namespace
 			[&] { return flag(a_conditions.playerSneaking, [&] { return RE::PlayerCharacter::GetSingleton()->IsSneaking(); }); },
 			[&] { return flag(a_conditions.interior, [&] { const auto cell = a_ref->GetParentCell(); return cell && cell->IsInteriorCell(); }); },
 			[&] { return flag(a_conditions.playerHasWeapon, PlayerHasWeapon); },
+			[&] { return flag(a_conditions.playerInCombat, [&] { return RE::PlayerCharacter::GetSingleton()->IsInCombat(); }); },
 			[&] { return flag(a_conditions.alive, [&] { return !actor->IsDead(); }); },
 			[&] { return flag(a_conditions.teammate, [&] { return actor->IsPlayerTeammate(); }); },
 			[&] { return flag(a_conditions.essential, [&] { return actor->IsEssential(); }); },
