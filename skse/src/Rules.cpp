@@ -18,7 +18,7 @@ namespace
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
 	// 6 (1.5.0): "info": "none" (nothing below the name line).
 	// 7 (1.6.0): "exclusive" (a rule that shares the target with no other; since 1.6.0 matching rules are merged).
-	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon" condition.
+	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon" and "knockedDown" conditions.
 	constexpr std::int32_t RULE_FORMAT_VERSION = 8;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
@@ -166,6 +166,7 @@ namespace
 			{ "sitting", &Rules::Conditions::sitting },
 			{ "sleeping", &Rules::Conditions::sleeping },
 			{ "inCombat", &Rules::Conditions::inCombat },
+			{ "knockedDown", &Rules::Conditions::knockedDown },
 			{ "read", &Rules::Conditions::read },
 			{ "spellTome", &Rules::Conditions::spellTome },
 			{ "locked", &Rules::Conditions::locked },
@@ -179,7 +180,7 @@ namespace
 		};
 		// which target each condition is for (the rest work for both)
 		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
-			"bleedingOut", "unconscious", "sitting", "sleeping", "inCombat" };
+			"bleedingOut", "unconscious", "sitting", "sleeping", "inCombat", "knockedDown" };
 		constexpr std::string_view objectOnly[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
 			"playerHasKey", "owned", "takeable" };
 		constexpr std::string_view format5[] = { "type", "base", "destinationKeyword", "read", "spellTome", "locked", "requiresKey",
@@ -189,8 +190,8 @@ namespace
 			if (std::ranges::contains(format5, key) && currentVersion < 5) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 5", key) };
 			}
-			if (key == "playerHasWeapon" && currentVersion < 8) {
-				throw RuleError{ "\"playerHasWeapon\" needs \"version\": 8" };
+			if ((key == "playerHasWeapon" || key == "knockedDown") && currentVersion < 8) {
+				throw RuleError{ std::format("\"{}\" needs \"version\": 8", key) };
 			}
 			if (a_target == Rules::Target::kObject && std::ranges::contains(npcOnly, key)) {
 				throw RuleError{ std::format("\"{}\" is for NPC rules, this rule's target is \"object\"", key) };
@@ -657,6 +658,12 @@ namespace
 			[&] { return flag(a_conditions.sitting, [&] { return state && state->IsSitting(); }); },
 			[&] { return flag(a_conditions.sleeping, [&] { return state && state->GetSitSleepState() == RE::SIT_SLEEP_STATE::kIsSleeping; }); },
 			[&] { return flag(a_conditions.inCombat, [&] { return actor->IsInCombat(); }); },
+			// knocked down (a shout, a stagger into ragdoll) or paralyzed (a spell, or Death Timer's downed NPCs, who
+			// aren't in the game's bleedout)
+			[&] { return flag(a_conditions.knockedDown, [&] {
+					  return (state && state->GetKnockState() != RE::KNOCK_STATE_ENUM::kNormal) ||
+				             actor->AsActorValueOwner()->GetActorValue(RE::ActorValue::kParalysis) > 0.0f;
+				  }); },
 			[&] { return anyOf(a_conditions.npcs, [&](RE::TESNPC* a_npc) { return actor->GetActorBase() == a_npc || actor->GetTemplateBase() == a_npc; }); },
 			[&] { return anyOf(a_conditions.races, [&](RE::TESRace* a_race) { return actor->GetRace() == a_race; }); },
 			[&] { return anyOf(a_conditions.keywords, [&](RE::BGSKeyword* a_keyword) {

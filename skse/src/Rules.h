@@ -137,6 +137,7 @@ namespace Rules
 		std::optional<bool>              sitting;
 		std::optional<bool>              sleeping;
 		std::optional<bool>              inCombat;
+		std::optional<bool>              knockedDown;  // knocked down, ragdolled or paralyzed (format 8)
 		// object targets (format 5)
 		std::uint32_t                    types = 0;  // ObjectType bits, 0 = any
 		std::vector<RE::TESBoundObject*> bases;

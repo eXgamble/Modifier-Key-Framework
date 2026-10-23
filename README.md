@@ -59,7 +59,7 @@ doesn't apply to it.
 | Key | Meaning |
 |---|---|
 | `$schema` | optional: [the schema](schema/rules.schema.json), for autocomplete and checks in your editor (VS Code and others). Ignored in game |
-| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type and `playerHasWeapon`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
+| `version` | optional: the rule format this file is written for (`1`, the default; `2`: optional `primary`, framework 1.1.0+; `3`: a list of `alternate` actions, framework 1.2.0+; `4`: dialogue topics, framework 1.3.0+; `5`: objects and `"do"` actions, framework 1.4.0+; `6`: `"info": "none"`, framework 1.5.0+; `7`: `"exclusive"`, framework 1.6.0+; `8`: the `drink` type, `playerHasWeapon` and `knockedDown`, framework 1.8.0+). A file written for a newer format than the installed framework reads is skipped with a message to update the framework |
 | `translations` | optional: the translation file for `$Key` labels (see [Translated labels](#translated-labels)) |
 | `rules` | the list of rules |
 
@@ -102,6 +102,7 @@ which means *any one of them*.
 | `sitting` | is sitting (furniture, or riding) |
 | `sleeping` | is asleep in a bed |
 | `inCombat` | is in combat |
+| `knockedDown` | is knocked down, ragdolled or paralyzed (format `8`): e.g. thrown by a shout, paralyzed by a spell, or downed by a mod that doesn't use the game's bleedout |
 | `topic` | offers the dialogue topic right now (format `4`): its quest runs and one of its lines passes its conditions, e.g. a merchant whose shop is open (see [Dialogue topics](#dialogue-topics)) |
 
 The `true`/`false` conditions compare with the value given: `"teammate": false` in `requires`
