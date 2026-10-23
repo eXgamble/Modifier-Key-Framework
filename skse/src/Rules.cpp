@@ -18,7 +18,8 @@ namespace
 	// 5 (1.4.0): "target": "object" with object conditions, and "do" actions (the game's own take / equip / use / ...).
 	// 6 (1.5.0): "info": "none" (nothing below the name line).
 	// 7 (1.6.0): "exclusive" (a rule that shares the target with no other; since 1.6.0 matching rules are merged).
-	constexpr std::int32_t RULE_FORMAT_VERSION = 7;
+	// 8 (1.8.0): the "drink" object type and the "playerHasWeapon" condition.
+	constexpr std::int32_t RULE_FORMAT_VERSION = 8;
 	constexpr std::size_t  MAX_ALTERNATES = 3;
 
 	std::vector<Rules::Rule> rules;  // sorted by priority, highest first
@@ -123,7 +124,7 @@ namespace
 		{ "book", Rules::kBook }, { "weapon", Rules::kWeapon }, { "armor", Rules::kArmor }, { "potion", Rules::kPotion },
 		{ "food", Rules::kFood }, { "poison", Rules::kPoison }, { "ingredient", Rules::kIngredient }, { "scroll", Rules::kScroll },
 		{ "torch", Rules::kTorch }, { "ammo", Rules::kAmmo }, { "misc", Rules::kMisc }, { "key", Rules::kKey },
-		{ "soulGem", Rules::kSoulGem }, { "door", Rules::kDoor }, { "container", Rules::kContainer },
+		{ "soulGem", Rules::kSoulGem }, { "door", Rules::kDoor }, { "container", Rules::kContainer }, { "drink", Rules::kDrink },
 	};
 
 	std::uint32_t ReadTypes(const json& a_value)
@@ -139,6 +140,9 @@ namespace
 					known += std::format("{}{}", known.empty() ? "" : ", ", typeName);
 				}
 				throw RuleError{ std::format("\"type\": {} is not one of {}", entry.dump(), known) };
+			}
+			if (type->second == Rules::kDrink && currentVersion < 8) {
+				throw RuleError{ "\"type\": \"drink\" needs \"version\": 8" };
 			}
 			types |= type->second;
 		}
@@ -171,6 +175,7 @@ namespace
 			{ "takeable", &Rules::Conditions::takeable },
 			{ "playerSneaking", &Rules::Conditions::playerSneaking },
 			{ "interior", &Rules::Conditions::interior },
+			{ "playerHasWeapon", &Rules::Conditions::playerHasWeapon },
 		};
 		// which target each condition is for (the rest work for both)
 		constexpr std::string_view npcOnly[] = { "item", "faction", "race", "npc", "topic", "alive", "teammate", "essential", "protected",
@@ -183,6 +188,9 @@ namespace
 		for (const auto& [key, value] : a_block.items()) {
 			if (std::ranges::contains(format5, key) && currentVersion < 5) {
 				throw RuleError{ std::format("\"{}\" needs \"version\": 5", key) };
+			}
+			if (key == "playerHasWeapon" && currentVersion < 8) {
+				throw RuleError{ "\"playerHasWeapon\" needs \"version\": 8" };
 			}
 			if (a_target == Rules::Target::kObject && std::ranges::contains(npcOnly, key)) {
 				throw RuleError{ std::format("\"{}\" is for NPC rules, this rule's target is \"object\"", key) };
@@ -582,6 +590,20 @@ namespace
 		return it != counts.end() && it->second > 0;
 	}
 
+	// A weapon in either of the player's hands, one a poison can go on (a staff doesn't count; bare hands aren't a weapon)
+	bool PlayerHasWeapon()
+	{
+		const auto player = RE::PlayerCharacter::GetSingleton();
+		for (const bool left : { false, true }) {
+			const auto object = player->GetEquippedObject(left);
+			const auto weapon = object ? object->As<RE::TESObjectWEAP>() : nullptr;
+			if (weapon && !weapon->IsStaff() && !weapon->IsHandToHandMelee()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	// Can be picked up: an item (not a book flagged can't-take, a light only if carryable)
 	bool Takeable(RE::TESObjectREFR* a_ref)
 	{
@@ -625,6 +647,7 @@ namespace
 			[&] { return flag(a_conditions.requiresKey, [&] { return a_ref->IsLocked() && a_ref->GetLockLevel() == RE::LOCK_LEVEL::kRequiresKey; }); },
 			[&] { return flag(a_conditions.playerSneaking, [&] { return RE::PlayerCharacter::GetSingleton()->IsSneaking(); }); },
 			[&] { return flag(a_conditions.interior, [&] { const auto cell = a_ref->GetParentCell(); return cell && cell->IsInteriorCell(); }); },
+			[&] { return flag(a_conditions.playerHasWeapon, PlayerHasWeapon); },
 			[&] { return flag(a_conditions.alive, [&] { return !actor->IsDead(); }); },
 			[&] { return flag(a_conditions.teammate, [&] { return actor->IsPlayerTeammate(); }); },
 			[&] { return flag(a_conditions.essential, [&] { return actor->IsEssential(); }); },
@@ -822,7 +845,16 @@ namespace Rules
 		case RE::FormType::AlchemyItem:
 			{
 				const auto item = base->As<RE::AlchemyItem>();
-				return item->IsPoison() ? kPoison : item->IsFood() ? kFood : kPotion;
+				if (item->IsPoison()) {
+					return kPoison;
+				}
+				if (!item->IsFood()) {
+					return kPotion;
+				}
+				// A drink is food that sounds like a potion when used (vanilla's ale, mead, wine, milk: ITMPotionUse);
+				// food is eaten (ITMFoodEat, NPCHumanEatSoup). It stays food too, so "food" rules still match it.
+				static const auto drinkSound = RE::TESForm::LookupByID<RE::BGSSoundDescriptorForm>(0x0B6435);
+				return item->data.consumptionSound && item->data.consumptionSound == drinkSound ? kFood | kDrink : kFood;
 			}
 		case RE::FormType::Ingredient:
 			return kIngredient;

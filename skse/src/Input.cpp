@@ -21,23 +21,47 @@ namespace
 		}
 	}
 
+	// One rebuild per frame however many changes ask for it (a load or an outfit change equips a dozen items)
+	std::atomic<bool> refreshQueued{ false };
+
+	void QueueRefreshOnce()
+	{
+		if (!refreshQueued.exchange(true)) {
+			SKSE::GetTaskInterface()->AddTask([] {
+				refreshQueued = false;
+				RefreshPrompt();
+			});
+		}
+	}
+
 	// The game builds the prompt only when the crosshair lands on a new target, so a rule that changes with the
-	// target's state goes stale while the player keeps looking at it: reading a book that's still under the
-	// crosshair left "Read" up where Read Or Take's read-book rule says "Take" (found 2026-10-22). Rebuilt once
-	// the book menu closes.
-	class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	// target's or the player's state goes stale while the player keeps looking at it: reading a book that's still
+	// under the crosshair left "Read" up where Read Or Take's read-book rule says "Take" (found 2026-10-22), and
+	// "playerHasWeapon" changes with what the player equips. Rebuilt when a menu closes (a book, the inventory,
+	// favorites) and when the player equips or unequips something (hotkeys equip without a menu).
+	class StateSink :
+		public RE::BSTEventSink<RE::MenuOpenCloseEvent>,
+		public RE::BSTEventSink<RE::TESEquipEvent>
 	{
 	public:
-		static MenuSink* GetSingleton()
+		static StateSink* GetSingleton()
 		{
-			static MenuSink singleton;
+			static StateSink singleton;
 			return &singleton;
 		}
 
 		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
 		{
-			if (a_event && !a_event->opening && a_event->menuName == RE::BookMenu::MENU_NAME) {
-				SKSE::GetTaskInterface()->AddTask([] { RefreshPrompt(); });
+			if (a_event && !a_event->opening) {
+				QueueRefreshOnce();
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::TESEquipEvent* a_event, RE::BSTEventSource<RE::TESEquipEvent>*) override
+		{
+			if (a_event && a_event->actor && a_event->actor->IsPlayerRef()) {
+				QueueRefreshOnce();
 			}
 			return RE::BSEventNotifyControl::kContinue;
 		}
@@ -104,7 +128,10 @@ namespace Input
 			logger::error("No input device manager, the modifier key won't work");
 		}
 		if (const auto ui = RE::UI::GetSingleton()) {
-			ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
+			ui->AddEventSink<RE::MenuOpenCloseEvent>(StateSink::GetSingleton());
+		}
+		if (const auto events = RE::ScriptEventSourceHolder::GetSingleton()) {
+			events->AddEventSink<RE::TESEquipEvent>(StateSink::GetSingleton());
 		}
 	}
 

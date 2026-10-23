@@ -85,7 +85,8 @@ namespace Rules
 		kKey = 1 << 11,
 		kSoulGem = 1 << 12,
 		kDoor = 1 << 13,
-		kContainer = 1 << 14
+		kContainer = 1 << 14,
+		kDrink = 1 << 15  // food that is drunk (ale, mead, wine, milk): always together with kFood
 	};
 
 	// "infoLabels": the word shown from a relationship rank up (4 Lover ... 0 Acquaintance ... -4 Archnemesis)
@@ -150,6 +151,7 @@ namespace Rules
 		// either target
 		std::optional<bool>              playerSneaking;
 		std::optional<bool>              interior;  // the target is in an interior cell
+		std::optional<bool>              playerHasWeapon;  // a weapon in either hand (format 8; a staff doesn't count)
 	};
 
 	// Switched from Papyrus (any thread), read by the prompt / activation (game thread)

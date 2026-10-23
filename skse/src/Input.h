@@ -3,8 +3,8 @@
 // The shared modifier key (ModifierKeyFramework.ini). While it's held, rules use their alternate action.
 namespace Input
 {
-	// Register for input events, and for the book menu closing (the prompt is rebuilt then). Call once the input
-	// device manager exists (kDataLoaded).
+	// Register for input events, and for menus closing and the player's equipment changing (the prompt is rebuilt
+	// then). Call once the input device manager exists (kDataLoaded).
 	void Register();
 
 	bool IsModifierHeld();
