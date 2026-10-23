@@ -21,6 +21,28 @@ namespace
 		}
 	}
 
+	// The game builds the prompt only when the crosshair lands on a new target, so a rule that changes with the
+	// target's state goes stale while the player keeps looking at it: reading a book that's still under the
+	// crosshair left "Read" up where Read Or Take's read-book rule says "Take" (found 2026-10-22). Rebuilt once
+	// the book menu closes.
+	class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent>
+	{
+	public:
+		static MenuSink* GetSingleton()
+		{
+			static MenuSink singleton;
+			return &singleton;
+		}
+
+		RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override
+		{
+			if (a_event && !a_event->opening && a_event->menuName == RE::BookMenu::MENU_NAME) {
+				SKSE::GetTaskInterface()->AddTask([] { RefreshPrompt(); });
+			}
+			return RE::BSEventNotifyControl::kContinue;
+		}
+	};
+
 	class InputSink : public RE::BSTEventSink<RE::InputEvent*>
 	{
 	public:
@@ -80,6 +102,9 @@ namespace Input
 			logger::info("Listening for the modifier key");
 		} else {
 			logger::error("No input device manager, the modifier key won't work");
+		}
+		if (const auto ui = RE::UI::GetSingleton()) {
+			ui->AddEventSink<RE::MenuOpenCloseEvent>(MenuSink::GetSingleton());
 		}
 	}
 
