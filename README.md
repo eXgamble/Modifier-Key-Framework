@@ -409,6 +409,30 @@ Script `ModifierKeyFramework` (source in `Scripts/Source/ModifierKeyFramework.ps
 To check that the framework is installed without depending on its script:
 `SKSE.GetPluginVersion("ModifierKeyFramework") > 0`.
 
+### C++ API (for HUDs that draw the prompt themselves)
+
+From 1.9.0, a mod that replaces the activation prompt with its own (an HTML HUD, for example) can draw MKF's part too.
+Copy [`skse/include/ModifierKeyFrameworkAPI.h`](skse/include/ModifierKeyFrameworkAPI.h) into your project and get the
+API from kPostLoad on:
+
+```cpp
+const auto get = reinterpret_cast<MKF::GetAPI>(GetProcAddress(GetModuleHandleW(L"ModifierKeyFramework.dll"), "MKF_GetAPI"));
+const MKF::API* mkf = get ? get() : nullptr;
+if (mkf && mkf->version >= 1) {
+    mkf->setExternalHud(true);  // MKF stops drawing into the vanilla HUD
+}
+```
+
+| Member | Does |
+|---|---|
+| `setExternalHud(bool)` | `true`: your HUD draws the prompt, so MKF draws no buttons or lines into the vanilla HUD and puts no text marker on the label |
+| `getPrompt(PromptExtras*)` | what MKF adds for the crosshair's current target: `more` (the modifier key's button goes beside Activate), `held` (the key is down), and while held up to two more lines, each with its label, the game control that runs it (`Ready Weapon`, `Jump`: show the player's binding) and whether it's a crime |
+| `getModifierButton(bool gamepad, char*, size)` | the modifier key's button as the game names it (`Shift`, `360_LB`) |
+
+The first line still comes in the game's own prompt text, as before (`Give Potion` / `Lydia`). Read `getPrompt` when
+the HUD's `SetCrosshairTarget` runs: MKF rebuilds the prompt whenever its part changes. Later versions only add members
+at the end, so check `version` before using a newer one.
+
 ### Coming from Dynamic Activation Key
 
 With DAK, a second action on an NPC is a perk: an *Activate* entry point on the player, conditioned

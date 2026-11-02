@@ -25,12 +25,15 @@ namespace
 	{
 		RE::ObjectRefHandle      target;
 		bool                     marker = false;  // the modifier key's button after the label
+		bool                     more = false;    // the target has modifier actions, key not held (API)
+		bool                     held = false;    // the key is held, the Activate line is a modifier action (API)
 		std::vector<std::string> labels;          // slot 2, slot 3 (modifier key held)
 	};
 	Prompt            prompt;  // written by the prompt hook, read by the HUD
 	std::mutex        promptLock;
 	std::atomic<bool> installed{ false };
 	std::atomic<bool> installTried{ false };  // the open HUD was looked at: one without SetCrosshairTarget isn't asked again
+	std::atomic<bool> external{ false };      // another mod draws the prompt (API): nothing of ours goes into the HUD
 
 	// The prompt's extras, if they belong to what the crosshair is on now
 	Prompt ActivePrompt()
@@ -137,6 +140,21 @@ namespace
 			logger::info("HUD: \"{}\" shows as {}.png (Activate: {}.png)", a_control.c_str(), art, a_activateArt);
 		}
 		return art;
+	}
+
+	// The modifier key's button name on a device, as the game names it: "Shift", "360_LB"
+	std::string ModifierName(bool a_gamepad)
+	{
+		const auto        devices = RE::BSInputDeviceManager::GetSingleton();
+		RE::BSFixedString name;
+		bool              found = false;
+		if (devices && a_gamepad && Settings::ModifierKeyGamepad() >= 0) {
+			const auto mask = SKSE::InputMap::GamepadKeycodeToMask(static_cast<std::uint32_t>(Settings::ModifierKeyGamepad()));
+			found = devices->GetButtonNameFromID(RE::INPUT_DEVICE::kGamepad, static_cast<std::int32_t>(mask), name);
+		} else if (devices && !a_gamepad) {
+			found = devices->GetButtonNameFromID(RE::INPUT_DEVICE::kKeyboard, static_cast<std::int32_t>(Settings::ModifierKey()), name);
+		}
+		return found && name.c_str() ? name.c_str() : "";
 	}
 
 	// The image name for the modifier key on the device the HUD shows now, e.g. "Shift" or "360_LB"
@@ -491,7 +509,7 @@ namespace
 		const double baseY = [&] { RE::GFxValue y; GetIn(a_hud, "mkfButtonBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(button, "_y"); }();
 		const double textBaseY = [&] { RE::GFxValue y; GetIn(a_hud, "mkfTextBaseY", &y); return y.IsNumber() ? y.GetNumber() : Number(text, "_y"); }();
 
-		const auto active = a_activate && a_name.IsString() ? ActivePrompt() : Prompt{};
+		const auto active = a_activate && a_name.IsString() && !external ? ActivePrompt() : Prompt{};
 		const auto& labels = active.labels;
 		HideFields(button);
 		if (labels.empty()) {
@@ -653,7 +671,7 @@ namespace Hud
 		}
 	}
 
-	void SetPrompt(RE::TESObjectREFR* a_target, bool a_marker, std::vector<std::string> a_labels)
+	void SetPrompt(RE::TESObjectREFR* a_target, bool a_marker, bool a_more, bool a_held, std::vector<std::string> a_labels)
 	{
 		// in case the HUD opened before we were watching: until the HUD has been looked at once (on a HUD without
 		// SetCrosshairTarget, every prompt queued another try and logged the warning again)
@@ -661,12 +679,14 @@ namespace Hud
 			SKSE::GetTaskInterface()->AddUITask(Install);
 		}
 		std::scoped_lock lock{ promptLock };
-		if (!a_target || (!a_marker && a_labels.empty())) {
+		if (!a_target || (!a_marker && !a_more && !a_held && a_labels.empty())) {
 			prompt = {};
 			return;
 		}
 		prompt.target = a_target->GetHandle();
 		prompt.marker = a_marker && a_labels.empty();
+		prompt.more = a_more;
+		prompt.held = a_held;
 		prompt.labels = std::move(a_labels);
 	}
 
@@ -678,6 +698,56 @@ namespace Hud
 
 	bool Ready()
 	{
-		return installed;
+		return installed || external;
+	}
+
+	void SetExternal(bool a_external)
+	{
+		if (external.exchange(a_external) != a_external) {
+			logger::info("HUD: {}", a_external ? "another mod draws the prompt (API), MKF stops drawing into the HUD" :
+			                                     "MKF draws into the HUD again");
+		}
+	}
+
+	bool Describe(MKF::PromptExtras& a_out)
+	{
+		a_out = {};
+		const auto active = ActivePrompt();
+		const auto target = active.target.get();
+		if (!target) {
+			return false;
+		}
+		a_out.target = target->GetFormID();
+		a_out.more = active.more;
+		a_out.held = active.held;
+		for (const auto& label : active.labels) {
+			if (a_out.lineCount >= std::size(a_out.lines)) {
+				break;
+			}
+			// the labels are prompt HTML (a theft is a red FONT tag): plain text and a crime flag instead
+			auto&       line = a_out.lines[a_out.lineCount];
+			std::string plain;
+			bool        inTag = false;
+			for (const char c : label) {
+				if (c == '<') {
+					inTag = true;
+				} else if (c == '>') {
+					inTag = false;
+				} else if (!inTag) {
+					plain += c;
+				}
+			}
+			line.crime = label.find("#FF0000") != std::string::npos;
+			strncpy_s(line.label, plain.c_str(), _TRUNCATE);
+			const auto& control = Settings::SlotControl(a_out.lineCount + 2);
+			strncpy_s(line.control, control.c_str() ? control.c_str() : "", _TRUNCATE);
+			++a_out.lineCount;
+		}
+		return true;
+	}
+
+	std::string ModifierButton(bool a_gamepad)
+	{
+		return ModifierName(a_gamepad);
 	}
 }

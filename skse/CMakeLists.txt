@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(ModifierKeyFramework VERSION 1.8.0 LANGUAGES CXX)
+project(ModifierKeyFramework VERSION 1.9.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,12 +19,12 @@ endif()
 add_commonlibsse_plugin(${PROJECT_NAME}
 	NAME "ModifierKeyFramework"
 	AUTHOR "eXgamble"
-	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp src/Papyrus.cpp src/Hud.cpp src/Dialogue.cpp src/Relationship.cpp)
+	SOURCES src/plugin.cpp src/Settings.cpp src/Rules.cpp src/Hooks.cpp src/Input.cpp src/Papyrus.cpp src/Hud.cpp src/Dialogue.cpp src/Relationship.cpp src/API.cpp)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_path(SIMPLEINI_INCLUDE_DIRS "SimpleIni.h")
 target_link_libraries(${PROJECT_NAME} PRIVATE nlohmann_json::nlohmann_json)
-target_include_directories(${PROJECT_NAME} PRIVATE src ${SIMPLEINI_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PRIVATE src include ${SIMPLEINI_INCLUDE_DIRS})
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_compile_options(${PROJECT_NAME} PRIVATE /Zc:preprocessor /permissive- /EHsc /utf-8 /W4)

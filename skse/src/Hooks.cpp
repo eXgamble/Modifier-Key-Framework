@@ -116,7 +116,7 @@ namespace
 				extra.push_back(LabelOf(*alternates[slot].action, a_target, a_dst));
 			}
 		}
-		Hud::SetPrompt(a_target, iconMarker, std::move(extra));
+		Hud::SetPrompt(a_target, iconMarker, marker, index != 0, std::move(extra));
 		const std::string_view vanilla{ a_dst.c_str() ? a_dst.c_str() : "" };
 		std::string            rest;
 		if (const auto newline = vanilla.find('\n'); newline != std::string_view::npos) {
