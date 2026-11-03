@@ -428,6 +428,7 @@ if (mkf && mkf->version >= 1) {
 | `setExternalHud(bool)` | `true`: your HUD draws the prompt, so MKF draws no buttons or lines into the vanilla HUD and puts no text marker on the label |
 | `getPrompt(PromptExtras*)` | what MKF adds for the crosshair's current target: `more` (the modifier key's button goes beside Activate), `held` (the key is down), and while held up to two more lines, each with its label, the game control that runs it (`Ready Weapon`, `Jump`: show the player's binding) and whether it's a crime |
 | `getModifierButton(bool gamepad, char*, size)` | the modifier key's button as the game names it (`Shift`, `360_LB`) |
+| `isConversationHidden()` (version 2) | `true` while the open conversation is a topic action's that MKF keeps out of sight (`endDialogue`: Buy / Sell, Train): a HUD that draws the dialogue menu itself shows no topic list, speaker name or Exit button meanwhile, only the NPC's line. It turns `false` with the menu still open when the pick goes wrong, so ask again |
 
 The first line still comes in the game's own prompt text, as before (`Give Potion` / `Lydia`). Read `getPrompt` when
 the HUD's `SetCrosshairTarget` runs: MKF rebuilds the prompt whenever its part changes. Later versions only add members

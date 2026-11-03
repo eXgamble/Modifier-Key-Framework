@@ -18,4 +18,7 @@ namespace Dialogue
 
 	// Remember what to pick once the conversation with a_actor opens. The caller then starts the conversation.
 	void Prepare(RE::Actor* a_actor, const std::vector<RE::TESTopic*>& a_topics, bool a_endDialogue);
+
+	// The conversation is (or is about to be) an endDialogue topic action's, kept out of sight. Any thread.
+	bool Hidden();
 }

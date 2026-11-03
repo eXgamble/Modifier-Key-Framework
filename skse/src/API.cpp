@@ -1,5 +1,6 @@
 #include "ModifierKeyFrameworkAPI.h"
 
+#include "Dialogue.h"
 #include "Hud.h"
 
 // The C++ API for mods that draw the activation prompt themselves (include/ModifierKeyFrameworkAPI.h)
@@ -25,7 +26,12 @@ namespace
 		return !name.empty();
 	}
 
-	constexpr MKF::API kAPI{ MKF::kAPIVersion, SetExternalHud, GetPrompt, GetModifierButton };
+	bool IsConversationHidden()
+	{
+		return Dialogue::Hidden();
+	}
+
+	constexpr MKF::API kAPI{ MKF::kAPIVersion, SetExternalHud, GetPrompt, GetModifierButton, IsConversationHidden };
 }
 
 extern "C" __declspec(dllexport) const MKF::API* MKF_GetAPI()

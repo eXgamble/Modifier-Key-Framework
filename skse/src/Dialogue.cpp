@@ -410,4 +410,11 @@ namespace Dialogue
 		std::lock_guard guard(lock);
 		pending = Pending{ a_actor->GetHandle(), a_topics, a_endDialogue };
 	}
+
+	bool Hidden()
+	{
+		// as the menu sink sees it: an unpicked action older than kOpenWithin is not this conversation's
+		std::lock_guard guard(lock);
+		return pending && pending->endDialogue && (pending->chosen || std::chrono::steady_clock::now() - pending->at <= kOpenWithin);
+	}
 }

@@ -23,7 +23,7 @@
 
 namespace MKF
 {
-	inline constexpr std::uint32_t kAPIVersion = 1;
+	inline constexpr std::uint32_t kAPIVersion = 2;
 
 	struct PromptLine
 	{
@@ -55,6 +55,13 @@ namespace MKF
 
 		// The modifier key's button name as the game names it for a device ("Shift", "360_LB"), into a_out.
 		bool (*getModifierButton)(bool a_gamepad, char* a_out, std::uint32_t a_size);
+
+		// Version 2: true while the open conversation is a topic action's that MKF keeps out of sight ("endDialogue":
+		// Buy / Sell, Train): the NPC turns and speaks, the topic's menu opens, then the conversation ends. A HUD that
+		// draws the dialogue menu itself shows no topic list, speaker name or Exit button meanwhile, only the NPC's line.
+		// It turns false with the menu still open when the pick goes wrong (the conversation then shows as usual), so
+		// ask again rather than once per conversation. Any thread.
+		bool (*isConversationHidden)();
 	};
 
 	using GetAPI = const API* (*)();
