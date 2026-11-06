@@ -23,7 +23,7 @@
 
 namespace MKF
 {
-	inline constexpr std::uint32_t kAPIVersion = 2;
+	inline constexpr std::uint32_t kAPIVersion = 3;
 
 	struct PromptLine
 	{
@@ -40,6 +40,15 @@ namespace MKF
 		bool          held;       // key held: the game's first line is already the first modifier action (on Activate)
 		std::uint32_t lineCount;  // while held: how many more lines go above it (0 to 2)
 		PromptLine    lines[2];   // lines[0] = slot 2 (X on a controller), lines[1] = slot 3 (Y), stacked upward
+	};
+
+	// Version 3: a target's modifier actions, for a mod that takes over activating it (a loot window over bodies and
+	// containers blocks the game's Activate, so MKF never sees the press). slots[0] is on Activate, slots[1] and
+	// slots[2] on the two slot controls (Ready Weapon and Jump by default), always filled from the first.
+	struct ModifierActions
+	{
+		std::uint32_t count;     // 0 to 3
+		PromptLine    slots[3];  // label, the control that runs it ("Activate" for the first), crime
 	};
 
 	struct API
@@ -62,6 +71,15 @@ namespace MKF
 		// It turns false with the menu still open when the pick goes wrong (the conversation then shows as usual), so
 		// ask again rather than once per conversation. Any thread.
 		bool (*isConversationHidden)();
+
+		// Version 3: the modifier actions the rules give this reference (by FormID), whether or not the key is held.
+		// False (count 0) when it has none. Reads only.
+		bool (*getModifierActions)(std::uint32_t a_target, ModifierActions* a_out);
+
+		// Version 3: runs modifier action a_slot (1 to 3, as in ModifierActions) on the reference, exactly as the
+		// player's own press would: the rule's mod event, topic or action. False when the target has no such action.
+		// Changes the world: call it from an SKSE task.
+		bool (*runModifierAction)(std::uint32_t a_target, std::uint32_t a_slot);
 	};
 
 	using GetAPI = const API* (*)();

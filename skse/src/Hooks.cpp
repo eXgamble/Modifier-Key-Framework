@@ -15,6 +15,10 @@ namespace
 	// "activate"s) gets the game's own activation.
 	thread_local bool playerPress = false;
 
+	// Set while the API reads a target's own activation text for an unlabeled action's verb: the prompt hook leaves the
+	// text and the HUD alone then.
+	thread_local bool quietText = false;
+
 	// The action Activate runs right now: the first modifier action the target offers while the modifier key is held,
 	// otherwise the top rule's primary. rule: the rule the action belongs to (with several rules merged, not always the
 	// top one). index: the action's place in that rule, 0 = primary, 1-3 = modifier action, the same number the mod event
@@ -252,7 +256,7 @@ namespace
 		static bool GetActivateText(RE::TESBoundObject* a_this, RE::TESObjectREFR* a_target, RE::BSString& a_dst)
 		{
 			const bool result = getText(a_this, a_target, a_dst);
-			if (a_target) {
+			if (a_target && !quietText) {
 				Prompt(a_target, a_dst);
 			}
 			return result;
@@ -376,6 +380,69 @@ namespace
 
 namespace Hooks
 {
+	std::uint32_t ModifierActions(RE::TESObjectREFR* a_target, MKF::ModifierActions& a_out)
+	{
+		a_out = {};
+		if (!a_target) {
+			return 0;
+		}
+		const auto resolved = Rules::Resolve(a_target);
+		if (!resolved.top || resolved.alternates.empty()) {
+			return 0;
+		}
+		// the target's own activation text, for an action without a label ("Search" on a body); quiet, so the
+		// prompt hook leaves the HUD alone
+		RE::BSString vanilla;
+		if (const auto base = a_target->GetBaseObject()) {
+			quietText = true;
+			base->GetActivateText(a_target, vanilla);
+			quietText = false;
+		}
+		for (const auto& slot : resolved.alternates) {
+			if (a_out.count >= std::size(a_out.slots)) {
+				break;
+			}
+			auto&      line = a_out.slots[a_out.count];
+			const auto& action = *slot.action;
+			line.crime = IsTheft(action, a_target);
+			std::string label;
+			if (!action.label.empty()) {
+				label = action.Text();
+			} else if (action.act == Rules::Do::kTake) {
+				label = GameString(line.crime ? "sSteal" : "sTake");
+			} else {
+				label = VanillaVerb(vanilla, a_target);
+			}
+			strncpy_s(line.label, label.c_str(), _TRUNCATE);
+			const char* control = "Activate";
+			if (a_out.count > 0) {
+				const auto& name = Settings::SlotControl(a_out.count + 1);
+				control = name.c_str() ? name.c_str() : "";
+			}
+			strncpy_s(line.control, control, _TRUNCATE);
+			++a_out.count;
+		}
+		return a_out.count;
+	}
+
+	bool RunModifierAction(RE::TESObjectREFR* a_target, std::uint32_t a_slot)
+	{
+		if (!a_target || a_slot < 1) {
+			return false;
+		}
+		const auto resolved = Rules::Resolve(a_target);
+		if (resolved.alternates.size() < a_slot) {
+			return false;
+		}
+		Rules::ReportMerge(a_target, resolved);
+		const auto& slot = resolved.alternates[a_slot - 1];
+		// the vanilla activation: not an Activate press, so the hook passes it on
+		Perform(*slot.rule, *slot.action, slot.index, a_target, [&] {
+			return a_target->ActivateRef(RE::PlayerCharacter::GetSingleton(), 0, nullptr, std::max(1, a_target->extraList.GetCount()), false);
+		});
+		return true;
+	}
+
 	void Install()
 	{
 		static std::once_flag once;

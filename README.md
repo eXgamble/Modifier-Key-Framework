@@ -429,6 +429,8 @@ if (mkf && mkf->version >= 1) {
 | `getPrompt(PromptExtras*)` | what MKF adds for the crosshair's current target: `more` (the modifier key's button goes beside Activate), `held` (the key is down), and while held up to two more lines, each with its label, the game control that runs it (`Ready Weapon`, `Jump`: show the player's binding) and whether it's a crime |
 | `getModifierButton(bool gamepad, char*, size)` | the modifier key's button as the game names it (`Shift`, `360_LB`) |
 | `isConversationHidden()` (version 2) | `true` while the open conversation is a topic action's that MKF keeps out of sight (`endDialogue`: Buy / Sell, Train): a HUD that draws the dialogue menu itself shows no topic list, speaker name or Exit button meanwhile, only the NPC's line. It turns `false` with the menu still open when the pick goes wrong, so ask again |
+| `getModifierActions(formID, ModifierActions*)` (version 3) | for a mod that takes over activating a target (a loot window over bodies and containers): the modifier actions the rules give it, whether or not the key is held, up to three, from the one on Activate, each with its plain label, control and crime flag |
+| `runModifierAction(formID, slot)` (version 3) | runs modifier action 1 to 3 on that target exactly as the player's press would (the rule's mod event, topic or action). It changes the world: call it from an SKSE task |
 
 The first line still comes in the game's own prompt text, as before (`Give Potion` / `Lydia`). Read `getPrompt` when
 the HUD's `SetCrosshairTarget` runs: MKF rebuilds the prompt whenever its part changes. Later versions only add members
@@ -490,7 +492,8 @@ game controls for the second and third modifier action (`sSlot2Control`, default
 - **Dynamic Activation Key:** give it a different key. With the same key, its perk-based action acts
   before the NPC's own activation and wins.
 - **QuickLoot-style mods** take over activating dead bodies and containers, so actions on dead NPCs
-  may not be reachable while their window shows.
+  may not be reachable while their window shows. A loot window can list and run them through the
+  C++ API (version 3, `getModifierActions` / `runModifierAction`).
 - **Read Or Take / Use Or Take (powerofthree):** fine with mods that only use NPC rules. MKF - Read
   Or Take and MKF - Use Or Take do the same job on this framework; don't use both versions together.
 
